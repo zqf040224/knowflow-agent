@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能知识库平台 - 登录</title>
+    <script>
+        (function () {
+            var theme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+    <link rel="stylesheet" href="/static/css/login_v3.css">
+</head>
+<body>
+    <main class="login-page">
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换深色模式" title="切换深色模式">
+            <span class="theme-icon">☾</span>
+        </button>
+
+        <section class="login-shell" aria-label="登录">
+            <div class="brand-panel">
+                <div class="brand-mark">
+                    <span class="mark-icon">文</span>
+                    <div>
+                        <p class="mark-kicker">智能知识库平台</p>
+                        <h1>智能知识库平台</h1>
+                    </div>
+                </div>
+                <div class="brand-copy">
+                    <h2>智能知识库工作台</h2>
+                    <p>统一管理本地资料、制度文件与业务知识，为检索、问答、写作和文档处理提供支撑。</p>
+                </div>
+                <div class="feature-list" aria-label="主要功能">
+                    <div class="feature-item">
+                        <span></span>
+                        <p>本地资料统一沉淀</p>
+                    </div>
+                    <div class="feature-item">
+                        <span></span>
+                        <p>知识库检索与智能问答</p>
+                    </div>
+                    <div class="feature-item">
+                        <span></span>
+                        <p>公文写作与材料处理</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-panel">
+                <div class="mobile-brand">
+                    <span class="mark-icon">文</span>
+                    <div>
+                        <p>智能知识库平台</p>
+                        <strong>智能知识库平台</strong>
+                    </div>
+                </div>
+
+                <div class="form-content" id="loginContent">
+                    <div class="form-header">
+                        <p class="form-eyebrow">账号登录</p>
+                        <h2>进入工作区</h2>
+                        <p>请输入管理员分配的账号信息。</p>
+                    </div>
+
+                    <div class="alert alert-error" id="loginError"></div>
+
+                    <form id="loginForm" class="auth-form">
+                        <div class="form-group">
+                            <label for="loginUsername">用户名</label>
+                            <input
+                                type="text"
+                                id="loginUsername"
+                                placeholder="请输入用户名"
+                                autocomplete="username"
+                                required
+                            >
+                        </div>
+
+                        <div class="form-group">
+                            <label for="loginPassword">密码</label>
+                            <div class="password-wrapper">
+                                <input
+                                    type="password"
+                                    id="loginPassword"
+                                    placeholder="请输入密码"
+                                    autocomplete="current-password"
+                                    required
+                                >
+                                <button type="button" class="toggle-password" id="toggleLoginPassword">
+                                    <svg class="icon-eye" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                        <circle cx="12" cy="12" r="3"></circle>
+                                    </svg>
+                                    <svg class="icon-eye-off hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                                        <line x1="1" y1="1" x2="23" y2="23"></line>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn-primary" id="loginBtn">
+                            <span class="btn-text">登录</span>
+                            <span class="btn-arrow">→</span>
+                            <div class="btn-loader hidden"></div>
+                        </button>
+                    </form>
+
+                    <p class="admin-notice">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="16" x2="12" y2="12"></line>
+                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                        </svg>
+                        账号由管理员统一创建，如需开通或重置密码请联系管理员。
+                    </p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div class="modal-overlay hidden" id="passwordModal">
+        <div class="modal-content">
+            <h3>修改默认密码</h3>
+            <p>为了账号安全，请修改您的默认密码</p>
+
+            <div class="form-group">
+                <label>原密码</label>
+                <input type="password" id="oldPassword" placeholder="请输入原密码">
+            </div>
+
+            <div class="form-group">
+                <label>新密码</label>
+                <input type="password" id="newPassword" placeholder="请输入新密码（至少6位）">
+            </div>
+
+            <div class="form-group">
+                <label>确认新密码</label>
+                <input type="password" id="confirmNewPassword" placeholder="请再次输入新密码">
+            </div>
+
+            <div class="alert alert-error" id="modalError"></div>
+
+            <button class="btn-primary" id="changePasswordBtn">
+                <span class="btn-text">确认修改</span>
+            </button>
+        </div>
+    </div>
+
+    <script src="/static/js/login_v3.js"></script>
+</body>
+</html>

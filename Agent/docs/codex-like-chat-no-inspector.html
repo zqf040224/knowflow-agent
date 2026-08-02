@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Codex-like Conversation Mockup</title>
+    <style>
+        :root {
+            --bg: #edf4fb;
+            --panel: #ffffff;
+            --soft: #f5f9fd;
+            --soft-2: #eef6ff;
+            --line: #d8e6f4;
+            --ink: #152236;
+            --muted: #64788d;
+            --faint: #8ba0b6;
+            --blue: #2f7fe8;
+            --cyan: #18a5a7;
+            --green: #2f9d67;
+            --amber: #b7791f;
+            --shadow: 0 22px 60px rgba(35, 74, 116, 0.14);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            font-family: "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+            color: var(--ink);
+            background: #e7f0fa;
+        }
+
+        .artboard {
+            width: 1440px;
+            height: 900px;
+            padding: 18px;
+            overflow: hidden;
+            background: linear-gradient(180deg, #fbfdff 0%, var(--bg) 100%);
+            border: 1px solid #cbdceb;
+            border-radius: 26px;
+            box-shadow: var(--shadow);
+        }
+
+        .shell {
+            height: 100%;
+            display: grid;
+            grid-template-rows: 70px 1fr;
+            gap: 18px;
+        }
+
+        .topbar {
+            display: grid;
+            grid-template-columns: 270px 1fr auto;
+            align-items: center;
+            gap: 18px;
+            padding: 0 18px;
+            background: rgba(255, 255, 255, 0.92);
+            border: 1px solid var(--line);
+            border-radius: 18px;
+        }
+
+        .brand, .status-pills, .actions, .message-meta, .step, .composer, .file-chip, .answer-top {
+            display: flex;
+            align-items: center;
+        }
+
+        .brand {
+            gap: 12px;
+            font-weight: 750;
+        }
+
+        .brand-mark {
+            width: 40px;
+            height: 40px;
+            display: grid;
+            place-items: center;
+            border-radius: 12px;
+            color: white;
+            background: linear-gradient(135deg, #62a7f8, #18a5a7);
+            font-weight: 800;
+        }
+
+        .status-pills {
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .pill {
+            height: 30px;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 0 12px;
+            border-radius: 999px;
+            border: 1px solid #d6e6f5;
+            background: #f3f8fe;
+            color: #526b84;
+            font-size: 13px;
+        }
+
+        .dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 0 4px rgba(47, 157, 103, 0.12);
+        }
+
+        .actions {
+            gap: 10px;
+        }
+
+        .icon-btn {
+            width: 36px;
+            height: 36px;
+            display: grid;
+            place-items: center;
+            border-radius: 10px;
+            border: 1px solid var(--line);
+            background: #f8fbff;
+            color: #4f6a82;
+            font-weight: 800;
+        }
+
+        .layout {
+            min-height: 0;
+            display: grid;
+            grid-template-columns: 264px minmax(0, 1fr);
+            gap: 18px;
+        }
+
+        .panel {
+            min-height: 0;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.94);
+            border: 1px solid var(--line);
+            border-radius: 18px;
+        }
+
+        .sidebar {
+            padding: 18px;
+        }
+
+        .sidebar h2 {
+            margin: 0 0 14px;
+            font-size: 15px;
+        }
+
+        .new-chat {
+            width: 100%;
+            height: 42px;
+            border-radius: 12px;
+            border: 1px solid #cfe0f2;
+            background: #f7fbff;
+            color: var(--blue);
+            font-weight: 700;
+        }
+
+        .session {
+            margin-top: 14px;
+            padding: 13px;
+            border-radius: 13px;
+            background: #f5f9fd;
+            border: 1px solid transparent;
+        }
+
+        .session.active {
+            background: #eef6ff;
+            border-color: #afcff4;
+        }
+
+        .session-title {
+            font-size: 13px;
+            font-weight: 700;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .session-meta {
+            margin-top: 6px;
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .chat {
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr) auto;
+        }
+
+        .chat-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 22px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .chat-head h1 {
+            margin: 0;
+            font-size: 20px;
+            letter-spacing: 0;
+        }
+
+        .mode-tabs {
+            display: flex;
+            gap: 4px;
+            padding: 4px;
+            border-radius: 12px;
+            background: #eef4fb;
+        }
+
+        .tab {
+            padding: 7px 12px;
+            border-radius: 9px;
+            color: #5d7186;
+            font-size: 12px;
+        }
+
+        .tab.active {
+            color: var(--blue);
+            background: white;
+            box-shadow: 0 4px 12px rgba(47, 127, 232, 0.12);
+        }
+
+        .messages {
+            min-height: 0;
+            padding: 22px;
+            overflow: hidden;
+        }
+
+        .user-bubble {
+            max-width: 700px;
+            margin-left: auto;
+            padding: 14px 16px;
+            border-radius: 16px;
+            color: white;
+            background: linear-gradient(135deg, #5aa0f5, #2f7fe8);
+            font-size: 14px;
+            line-height: 1.72;
+        }
+
+        .assistant {
+            width: min(980px, 100%);
+            margin-top: 20px;
+        }
+
+        .progress-card {
+            border: 1px solid #dbe8f5;
+            border-radius: 16px;
+            background: #f8fbff;
+            overflow: hidden;
+        }
+
+        .progress-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 46px;
+            padding: 0 14px;
+            border-bottom: 1px solid #e6eff8;
+            font-size: 13px;
+        }
+
+        .message-meta {
+            gap: 8px;
+            color: #4f667d;
+            font-weight: 650;
+        }
+
+        .pulse {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--blue);
+            box-shadow: 0 0 0 4px rgba(47, 127, 232, 0.12);
+        }
+
+        .progress-toggle {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .step-strip {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+            padding: 12px 14px 14px;
+        }
+
+        .step {
+            min-width: 0;
+            gap: 8px;
+            padding: 9px;
+            border-radius: 12px;
+            background: white;
+            border: 1px solid #dde9f5;
+        }
+
+        .step.current {
+            border-color: #9bc8fa;
+            box-shadow: 0 0 0 4px rgba(47, 127, 232, 0.08);
+        }
+
+        .step-icon {
+            width: 28px;
+            height: 28px;
+            display: grid;
+            place-items: center;
+            flex: 0 0 auto;
+            border-radius: 9px;
+            color: white;
+            background: var(--blue);
+            font-size: 10px;
+            font-weight: 800;
+        }
+
+        .step-icon.cyan { background: var(--cyan); }
+        .step-icon.green { background: var(--green); }
+        .step-icon.amber { background: var(--amber); }
+
+        .step-copy {
+            min-width: 0;
+        }
+
+        .step-name {
+            font-size: 12px;
+            font-weight: 750;
+        }
+
+        .step-desc {
+            margin-top: 2px;
+            color: var(--muted);
+            font-size: 11px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .answer {
+            margin-top: 14px;
+            border: 1px solid #dbe8f5;
+            border-radius: 16px;
+            background: white;
+            overflow: hidden;
+        }
+
+        .answer-top {
+            justify-content: space-between;
+            padding: 12px 16px;
+            border-bottom: 1px solid #e6eff8;
+            color: #526b84;
+            font-size: 12px;
+        }
+
+        .answer-body {
+            padding: 22px 24px;
+            font-size: 15px;
+            line-height: 1.92;
+        }
+
+        .answer-body h2 {
+            margin: 0 0 14px;
+            font-size: 21px;
+        }
+
+        .cursor {
+            display: inline-block;
+            width: 7px;
+            height: 18px;
+            margin-left: 2px;
+            border-radius: 999px;
+            background: var(--blue);
+            vertical-align: -3px;
+        }
+
+        .file-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding: 0 24px 20px;
+        }
+
+        .file-chip {
+            gap: 6px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            border: 1px solid #d8e6f4;
+            background: #f3f8fe;
+            color: #526b84;
+            font-size: 12px;
+        }
+
+        .actions-row {
+            display: flex;
+            gap: 8px;
+            padding: 14px 24px 22px;
+            border-top: 1px solid #edf3f9;
+        }
+
+        .small-btn {
+            padding: 8px 12px;
+            border-radius: 999px;
+            border: 1px solid #d8e6f4;
+            background: #f5f9fd;
+            color: #526b84;
+            font-size: 12px;
+            font-weight: 650;
+        }
+
+        .small-btn.primary {
+            color: white;
+            border-color: var(--blue);
+            background: var(--blue);
+        }
+
+        .composer-wrap {
+            padding: 14px 22px 18px;
+            border-top: 1px solid var(--line);
+        }
+
+        .composer {
+            min-height: 56px;
+            gap: 10px;
+            padding: 8px 10px 8px 14px;
+            border-radius: 16px;
+            border: 1px solid #d6e4f2;
+            background: #f8fbff;
+            color: #6a7e92;
+            font-size: 14px;
+        }
+
+        .plus {
+            width: 36px;
+            height: 36px;
+            display: grid;
+            place-items: center;
+            flex: 0 0 auto;
+            border-radius: 11px;
+            background: #eef6ff;
+            color: var(--blue);
+            font-weight: 800;
+        }
+
+        .placeholder {
+            flex: 1;
+        }
+
+        .send {
+            width: 38px;
+            height: 38px;
+            display: grid;
+            place-items: center;
+            border-radius: 12px;
+            color: white;
+            background: var(--blue);
+            font-weight: 900;
+        }
+    </style>
+</head>
+<body>
+    <section class="artboard">
+        <div class="shell">
+            <header class="topbar">
+                <div class="brand">
+                    <div class="brand-mark">R</div>
+                    <span>智能知识库平台</span>
+                </div>
+                <div class="status-pills">
+                    <span class="pill"><span class="dot"></span>公文协作运行中</span>
+                    <span class="pill">正文优先展示</span>
+                    <span class="pill">过程默认收起</span>
+                </div>
+                <div class="actions">
+                    <div class="icon-btn">☾</div>
+                    <div class="icon-btn">!</div>
+                    <div class="icon-btn">⌘</div>
+                </div>
+            </header>
+
+            <main class="layout">
+                <aside class="panel sidebar">
+                    <h2>对话记录</h2>
+                    <button class="new-chat">＋ 新建对话</button>
+                    <div class="session active">
+                        <div class="session-title">起草园区升级建议</div>
+                        <div class="session-meta">正在生成 · 48 秒</div>
+                    </div>
+                    <div class="session">
+                        <div class="session-title">NAS 服务器使用说明</div>
+                        <div class="session-meta">昨天 16:24</div>
+                    </div>
+                    <div class="session">
+                        <div class="session-title">会议通知正式版</div>
+                        <div class="session-meta">6-07</div>
+                    </div>
+                    <div class="session">
+                        <div class="session-title">报销表模板导出</div>
+                        <div class="session-meta">6-06</div>
+                    </div>
+                </aside>
+
+                <section class="panel chat">
+                    <div class="chat-head">
+                        <h1>智能体对话</h1>
+                        <div class="mode-tabs">
+                            <span class="tab">智能客服</span>
+                            <span class="tab active">公文协作</span>
+                        </div>
+                    </div>
+
+                    <div class="messages">
+                        <div class="user-bubble">
+                            结合知识库内容，起草一份关于“推动示例园区绿色升级”的对策建议，要求结构清晰、有依据。
+                        </div>
+
+                        <div class="assistant">
+                            <div class="progress-card">
+                                <div class="progress-head">
+                                    <div class="message-meta">
+                                        <span class="pulse"></span>
+                                        <span>正在生成最终正文</span>
+                                    </div>
+                                    <span class="progress-toggle">展开过程 · 5 步 · 已引用 3 份材料</span>
+                                </div>
+                                <div class="step-strip">
+                                    <div class="step">
+                                        <div class="step-icon">ORC</div>
+                                        <div class="step-copy">
+                                            <div class="step-name">任务拆解</div>
+                                            <div class="step-desc">已完成</div>
+                                        </div>
+                                    </div>
+                                    <div class="step">
+                                        <div class="step-icon cyan">CTX</div>
+                                        <div class="step-copy">
+                                            <div class="step-name">上下文</div>
+                                            <div class="step-desc">识别公文约束</div>
+                                        </div>
+                                    </div>
+                                    <div class="step">
+                                        <div class="step-icon green">KB</div>
+                                        <div class="step-copy">
+                                            <div class="step-name">检索材料</div>
+                                            <div class="step-desc">命中 12 个片段</div>
+                                        </div>
+                                    </div>
+                                    <div class="step current">
+                                        <div class="step-icon amber">WRT</div>
+                                        <div class="step-copy">
+                                            <div class="step-name">正文起草</div>
+                                            <div class="step-desc">流式输出中</div>
+                                        </div>
+                                    </div>
+                                    <div class="step">
+                                        <div class="step-icon">CHK</div>
+                                        <div class="step-copy">
+                                            <div class="step-name">质量检查</div>
+                                            <div class="step-desc">等待执行</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <article class="answer">
+                                <div class="answer-top">
+                                    <span>Writer 正在输出 · 约 760 字</span>
+                                    <span>自动滚动已开启</span>
+                                </div>
+                                <div class="answer-body">
+                                    <h2>推动示例园区绿色升级的对策建议</h2>
+                                    <p>示例园区正在推进绿色化与数字化改造，可围绕节能设备、智慧运维和资源循环等方向，形成“试点验证、协同改造、效果评估”的实施路径。</p>
+                                    <p>一、以赛事场景开放带动产品验证。建议建立赛事应用场景清单，优先向本地企业开放智能设备、智慧交通、安防巡检、文旅消费等场景，推动企业在真实运行环境中完成产品测试、示范展示和迭代优化。</p>
+                                    <p>二、以产业链协同提升供给能力。围绕赛事服务需求，组织龙头企业、专精特新企业和科研机构开展联合攻关，形成可复制的解决方案<span class="cursor"></span></p>
+                                </div>
+                                <div class="file-row">
+                                    <span class="file-chip">来源：示例材料 A：园区现状</span>
+                                    <span class="file-chip">来源：示例材料 B：改造方案</span>
+                                    <span class="file-chip">来源：示例材料 C：评估指标</span>
+                                </div>
+                                <div class="actions-row">
+                                    <span class="small-btn primary">导入编辑器</span>
+                                    <span class="small-btn">复制</span>
+                                    <span class="small-btn">更正式</span>
+                                    <span class="small-btn">补充依据</span>
+                                    <span class="small-btn">重新生成</span>
+                                </div>
+                            </article>
+                        </div>
+                    </div>
+
+                    <div class="composer-wrap">
+                        <div class="composer">
+                            <span class="plus">＋</span>
+                            <span class="placeholder">继续追问、要求改写，或上传 Word / PDF</span>
+                            <span class="send">↑</span>
+                        </div>
+                    </div>
+                </section>
+            </main>
+        </div>
+    </section>
+</body>
+</html>

@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能知识库平台</title>
+    <script>
+        (function () {
+            var theme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+    <link rel="stylesheet" href="/static/css/chat.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <div class="app-shell">
+        <div class="network-status" id="networkStatus">
+            <span>网络连接异常，请检查网络</span>
+        </div>
+
+        <header class="header">
+            <div class="header-brand">
+                <button class="mobile-nav-btn" type="button" onclick="document.body.classList.toggle('sidebar-open')" title="展开侧栏">菜单</button>
+                <div class="logo">
+                    <div class="logo-copy">
+                        <span class="logo-title">智能知识库平台</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="header-center">
+                <div class="header-pill" id="workspacePill">
+                    <span class="pill-dot"></span>
+                    <span>文档协作</span>
+                </div>
+            </div>
+
+            <div class="header-actions">
+                <button class="icon-btn theme-toggle" id="themeToggle" onclick="toggleTheme()" title="切换深色模式" aria-label="切换深色模式">
+                    <span class="theme-icon">深色</span>
+                </button>
+                <button class="icon-btn" onclick="showFeedbackModal()" title="提交内测反馈">反馈</button>
+                <button class="icon-btn" onclick="location.href='/admin'" title="管理后台">管理</button>
+                <button class="icon-btn" onclick="logout()" title="退出登录">退出</button>
+            </div>
+        </header>
+
+        <div class="main-container">
+            <aside class="sidebar-section">
+                <div class="sidebar-panel">
+                    <div class="sidebar-header">
+                        <div class="sidebar-title-group">
+                            <h2>对话记录</h2>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-actions">
+                        <button class="sidebar-btn" onclick="createNewSession()">新建对话</button>
+                    </div>
+
+                    <div class="sidebar-list-header">
+                        <span>最近会话</span>
+                    </div>
+
+                    <div class="sidebar-content" id="conversationList">
+                        <div class="sidebar-empty">
+                            <p>暂无对话记录</p>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <main class="chat-section">
+                <div class="chat-panel">
+                    <div class="chat-panel-header">
+                        <div>
+                            <h1 class="chat-panel-title">智能体对话</h1>
+                        </div>
+                        <button class="editor-toggle" id="editorToggle" onclick="toggleEditor()" title="打开文档编辑器">
+                            <span>文档编辑器</span>
+                        </button>
+                    </div>
+
+                    <div class="chat-panel-body">
+                        <section class="welcome-state" id="welcomeState">
+                            <h2 class="welcome-title">请输入任务内容</h2>
+
+                            <div class="suggestions-grid">
+                                <button class="suggestion-card" type="button" onclick="setInput('帮我写一份会议通知，要求正式、简洁、便于直接下发')">
+                                    <span class="suggestion-tag">通知</span>
+                                    <strong>生成会议通知</strong>
+                                </button>
+                                <button class="suggestion-card" type="button" onclick="setInput('根据已有材料整理一份工作汇报，突出重点成果与下一步计划')">
+                                    <span class="suggestion-tag">汇报</span>
+                                    <strong>整理工作报告</strong>
+                                </button>
+                                <button class="suggestion-card" type="button" onclick="setInput('结合知识库内容，起草一份对策建议，结构要清晰、有论据支撑')">
+                                    <span class="suggestion-tag">建议</span>
+                                    <strong>撰写对策建议</strong>
+                                </button>
+                                <button class="suggestion-card" type="button" onclick="setInput('我上传一份材料后，你帮我改成规范公文格式并导入编辑器')">
+                                    <span class="suggestion-tag">改写</span>
+                                    <strong>上传后排版改写</strong>
+                                </button>
+                            </div>
+                        </section>
+
+                        <section class="chat-messages" id="chatMessages" style="display: none;">
+                            <div class="skeleton-container" id="skeletonLoader">
+                                <div class="skeleton-message user">
+                                    <div class="skeleton-avatar skeleton"></div>
+                                    <div class="skeleton-content">
+                                        <div class="skeleton-line medium skeleton"></div>
+                                    </div>
+                                </div>
+                                <div class="skeleton-message assistant">
+                                    <div class="skeleton-content">
+                                        <div class="skeleton-line long skeleton"></div>
+                                        <div class="skeleton-line medium skeleton"></div>
+                                        <div class="skeleton-line medium skeleton"></div>
+                                        <div class="skeleton-line short skeleton"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+
+                    <div class="input-container">
+                        <div class="input-wrapper">
+                            <div class="mode-selector">
+                                <button class="mode-btn" data-mode="agent" onclick="selectChatMode('agent')">公文协作</button>
+                                <button class="mode-btn active" data-mode="quick" onclick="selectChatMode('quick')">智能客服</button>
+                            </div>
+
+                            <div class="chat-input-shell">
+                                <button class="upload-trigger" onclick="showUploadModal()" title="上传文档">添加附件</button>
+                                <div class="chat-input-main">
+                                    <div id="attachedFilesDisplay" class="attached-files-display" hidden></div>
+                                    <textarea
+                                        class="chat-input"
+                                        id="chatInput"
+                                    placeholder="输入问题或任务，例如：NAS服务器如何使用？或 帮我写一份通知"
+                                        rows="1"
+                                    ></textarea>
+                                </div>
+                                <button class="send-trigger" id="sendBtn" onclick="sendMessage()" title="发送">发送</button>
+                            </div>
+
+                            <div class="input-hint">支持上传 Word / PDF</div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <aside class="editor-section" id="editorSection">
+            <div class="editor-workspace">
+                <section class="editor-left-panel">
+                    <div class="editor-panel-card editor-outline-card">
+                        <div class="editor-panel-title">
+                            <span>文档结构</span>
+                            <button class="editor-icon-btn" type="button" title="折叠结构">☰</button>
+                        </div>
+                        <div class="editor-outline-list" id="editorOutlineList">
+                            <button class="outline-item active" type="button">
+                                <span class="drag-dot">⁝⁝</span>
+                                <span class="outline-icon heading">H</span>
+                                <span>标题</span>
+                            </button>
+                            <button class="outline-item" type="button">
+                                <span class="drag-dot">⁝⁝</span>
+                                <span class="outline-icon">♙</span>
+                                <span>主送单位</span>
+                            </button>
+                            <button class="outline-item" type="button">
+                                <span class="drag-dot">⁝⁝</span>
+                                <span class="outline-icon">▤</span>
+                                <span>正文</span>
+                                <span class="outline-chevron">⌄</span>
+                            </button>
+                            <div class="outline-subitem">一、会议背景</div>
+                            <div class="outline-subitem">二、会议安排</div>
+                            <div class="outline-subitem">三、有关要求</div>
+                            <button class="outline-item" type="button">
+                                <span class="drag-dot">⁝⁝</span>
+                                <span class="outline-icon">⌘</span>
+                                <span>附件</span>
+                            </button>
+                            <button class="outline-item" type="button">
+                                <span class="drag-dot">⁝⁝</span>
+                                <span class="outline-icon">♧</span>
+                                <span>落款</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="editor-panel-card editor-source-card">
+                        <div class="editor-panel-title">
+                            <span>来源</span>
+                            <button class="editor-link-btn" type="button" onclick="showUploadModal('temp')">上传</button>
+                        </div>
+                        <div class="source-list" id="editorSourceList">
+                            <div class="editor-side-empty">上传附件或生成文档后显示来源</div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="editor-center-panel">
+                    <div class="editor-toolbar">
+                        <div class="toolbar-group toolbar-format">
+                            <select class="editor-select font-select" id="fontFamilySelect" onchange="changeFontFamily(this.value)" title="字体">
+                                <option value="SimSun">宋体</option>
+                                <option value="SimHei">黑体</option>
+                                <option value="Microsoft YaHei">微软雅黑</option>
+                                <option value="Arial">Arial</option>
+                                <option value="inherit">默认</option>
+                            </select>
+                            <select class="editor-select size-select" id="fontSizeSelect" onchange="changeFontSize(this.value)" title="字号">
+                                <option value="16px">三号</option>
+                                <option value="12px">小四</option>
+                                <option value="14px">四号</option>
+                                <option value="18px">二号</option>
+                                <option value="20px">小二</option>
+                            </select>
+                            <select class="editor-select line-select" onchange="changeLineHeight(this.value)" title="行距">
+                                <option value="2.05">1.5倍行距</option>
+                                <option value="1.6">单倍行距</option>
+                                <option value="2.45">2倍行距</option>
+                            </select>
+                        </div>
+                        <div class="toolbar-group toolbar-format-icons">
+                            <button class="toolbar-chip-btn" type="button" onclick="insertSourceCitation()" title="插入来源">⌘ 插入来源</button>
+                            <button class="toolbar-chip-btn" type="button" onclick="clearEditor()" title="清空">⌫ 清空</button>
+                        </div>
+                    </div>
+
+                    <div class="editor-canvas">
+                        <div class="paper-page">
+                            <span class="page-corner top-left"></span>
+                            <span class="page-corner top-right"></span>
+                            <div id="editorDisplay" class="document-content" contenteditable="true" data-placeholder="生成的文档会显示在这里，也可以直接起草"></div>
+                        </div>
+                    </div>
+
+                    <div class="editor-page-footer">
+                        <div class="page-spec">A4</div>
+                        <div>210 × 297mm</div>
+                        <div>页边距：上 25mm　下 25mm　左 20mm　右 20mm</div>
+                        <div>导出时按中心公文格式重新排版</div>
+                    </div>
+                </section>
+
+                <section class="editor-right-panel">
+                    <div class="editor-state-card">
+                        <div class="editor-state-title">文档状态</div>
+                        <div class="editor-state-list">
+                            <div class="editor-state-row">
+                                <span>导出模板</span>
+                                <strong id="editorTemplateState">自动识别</strong>
+                            </div>
+                            <div class="editor-state-row">
+                                <span>内容状态</span>
+                                <strong id="editorContentState">空白</strong>
+                            </div>
+                            <div class="editor-state-row">
+                                <span>来源</span>
+                                <strong id="editorSourceState">0 个来源</strong>
+                            </div>
+                            <div class="editor-state-row">
+                                <span>最近保存</span>
+                                <strong id="editorSavedState">尚未保存</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="editor-state-card">
+                        <div class="editor-state-title">上线提示</div>
+                        <p class="editor-state-note">生成完成后会自动导入编辑器。导出前请确认底部 Word 模板选择正确。</p>
+                    </div>
+                </section>
+            </div>
+
+            <div class="editor-bottom-bar">
+                <div class="editor-bottom-meta">
+                    <span id="wordCount">字数：0</span>
+                    <span class="autosave-indicator">自动保存 <i></i> <b id="autosaveTime">--:--:--</b></span>
+                    <span class="editor-status" id="editorStatus">
+                        <span class="status-icon">✓</span>
+                        <span class="status-text">就绪</span>
+                    </span>
+                </div>
+                <div class="editor-bottom-actions">
+                    <button class="editor-btn back-workspace-control" onclick="toggleEditor()" title="返回智能体对话工作区">← 返回工作区</button>
+                    <label class="template-select-control" title="选择 Word 导出模板">
+                        <span>Word 模板</span>
+                        <select id="wordTemplateSelect" onchange="setWordExportTemplate(this.value)">
+                            <option value="auto">自动识别</option>
+                            <option value="default">普通公文</option>
+                            <option value="review_proposal">会议审议案</option>
+                        </select>
+                    </label>
+                    <button class="editor-btn primary export-word-control" id="exportWordBtn" onclick="exportDocument()" title="导出 Word 文档">
+                        <span class="word-badge">W</span>
+                        <span>导出 Word</span>
+                        <span class="export-caret">⌄</span>
+                    </button>
+                    <button class="editor-btn export-excel-control" id="exportExcelBtn" onclick="exportSpreadsheetDocument()" title="导出 Excel 表格">
+                        <span class="excel-badge">X</span>
+                        <span>导出 Excel</span>
+                    </button>
+                    <button class="editor-btn copy-control" onclick="copyDocument()" title="复制内容">▣ 复制</button>
+                </div>
+            </div>
+        </aside>
+
+        <div id="feedbackModal" class="feedback-modal">
+            <div class="feedback-dialog">
+                <div class="upload-dialog-header">
+                    <div>
+                        <h3 class="modal-title">内测反馈</h3>
+                    </div>
+                    <button class="editor-close" type="button" onclick="hideFeedbackModal()" title="关闭">✕</button>
+                </div>
+
+                <div class="feedback-form">
+                    <label class="feedback-field">
+                        <span>反馈类型</span>
+                        <select id="feedbackCategory">
+                            <option value="general">一般反馈</option>
+                            <option value="bug">问题故障</option>
+                            <option value="quality">生成质量</option>
+                            <option value="knowledge">知识库检索</option>
+                            <option value="upload">上传入库</option>
+                            <option value="export">导出 Word</option>
+                            <option value="performance">响应速度</option>
+                        </select>
+                    </label>
+
+                    <label class="feedback-field">
+                        <span>满意度</span>
+                        <select id="feedbackRating">
+                            <option value="0">暂不评分</option>
+                            <option value="5">5 分，很好用</option>
+                            <option value="4">4 分，基本满意</option>
+                            <option value="3">3 分，需要改进</option>
+                            <option value="2">2 分，影响使用</option>
+                            <option value="1">1 分，无法接受</option>
+                        </select>
+                    </label>
+
+                    <label class="feedback-field full">
+                        <span>反馈内容</span>
+                        <textarea id="feedbackContent" rows="5" placeholder="请描述你遇到的问题、期望效果，或这次生成哪里不满意。"></textarea>
+                    </label>
+                </div>
+
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="hideFeedbackModal()">取消</button>
+                    <button class="btn btn-primary" id="feedbackSubmitBtn" onclick="submitFeedback()">提交反馈</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="uploadModal" class="upload-modal">
+            <div class="upload-modal-content">
+                <div class="upload-dialog-header">
+                    <div>
+                        <h3 class="modal-title">上传文档</h3>
+                    </div>
+                    <button class="editor-close" type="button" onclick="hideUploadModal()" title="关闭">✕</button>
+                </div>
+
+                <div class="upload-area" id="dropZone">
+                    <div class="icon">⬆</div>
+                    <div class="title">点击选择文件，或直接拖拽到这里</div>
+                    <div class="hint">支持 `.doc`、`.docx`、`.pdf`、`.txt`、`.md`、`.xlsx`、`.xls`、`.csv`，单个文件不超过 10MB</div>
+                    <input type="file" id="fileInput" accept=".doc,.docx,.pdf,.txt,.md,.xlsx,.xls,.csv" style="display: none;">
+                </div>
+
+                <div class="selected-file" id="selectedFile" style="display: none;">
+                    <div class="file-info">
+                        <span class="icon" id="fileIcon">文件</span>
+                        <div class="details">
+                            <span class="name" id="fileName"></span>
+                            <span class="size" id="fileSize"></span>
+                        </div>
+                    </div>
+                    <button class="file-remove" onclick="clearFiles()">清除</button>
+                </div>
+
+                <div class="upload-mode-select" id="uploadModeSelect">
+                    <div class="mode-label">上传方式</div>
+                    <div class="mode-options">
+                        <div class="mode-option selected" id="modeKnowledge" onclick="selectUploadMode('knowledge')">
+                            <label class="mode-option-content">
+                                <input type="radio" name="uploadMode" value="knowledge" checked>
+                                <span class="radio"></span>
+                                <div class="mode-option-text">
+                                    <div class="mode-option-title">添加到团队知识库</div>
+                                    <div class="mode-option-desc">适合团队共享、长期沉淀、可被统一检索的资料。</div>
+                                    <div class="mode-option-warning">请确保内容不含不应共享的个人隐私或敏感信息。</div>
+                                    <div class="category-select">
+                                        <select id="categorySelect">
+                                            <option value="">-- 加载中... --</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </label>
+                        </div>
+
+                        <div class="mode-option" id="modeTemp" onclick="selectUploadMode('temp')">
+                            <label class="mode-option-content">
+                                <input type="radio" name="uploadMode" value="temp">
+                                <span class="radio"></span>
+                                <div class="mode-option-text">
+                                    <div class="mode-option-title">仅当前对话临时使用</div>
+                                    <div class="mode-option-desc">文件内容会附加到本次提问，不进入团队知识库。</div>
+                                    <div class="mode-option-warning">大文件可能被截断，适合快速改写、提炼和格式调整。</div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="hideUploadModal()">取消</button>
+                    <button class="btn btn-primary" id="uploadSubmitBtn" onclick="startUpload()" disabled>开始上传</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="spreadsheetTransformModal" class="feedback-modal">
+            <div class="feedback-dialog">
+                <div class="upload-dialog-header">
+                    <div>
+                        <h3 class="modal-title">处理表格</h3>
+                    </div>
+                    <button class="editor-close" type="button" onclick="hideSpreadsheetTransformModal()" title="关闭">✕</button>
+                </div>
+
+                <div class="feedback-form">
+                    <label class="feedback-field full">
+                        <span>当前表格</span>
+                        <input id="spreadsheetTransformFilename" type="text" readonly>
+                    </label>
+                    <label class="feedback-field full">
+                        <span>处理规则</span>
+                        <textarea id="spreadsheetTransformInstruction" rows="5" placeholder="例如：筛选状态为进行中，按预算从高到低排序，导出前 20 条。"></textarea>
+                    </label>
+                </div>
+
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="hideSpreadsheetTransformModal()">取消</button>
+                    <button class="btn btn-primary" id="spreadsheetTransformSubmitBtn" onclick="submitSpreadsheetTransform()">处理并导出</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/chat.js"></script>
+</body>
+</html>

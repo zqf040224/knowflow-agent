@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conversation UI Mockups</title>
+    <style>
+        :root {
+            --ink: #152236;
+            --muted: #66788f;
+            --soft: #f4f8fc;
+            --line: #dce8f5;
+            --panel: #ffffff;
+            --blue: #2f7fe8;
+            --cyan: #18a5a7;
+            --green: #2f9d67;
+            --amber: #b7791f;
+            --red: #d64545;
+            --violet: #6750c8;
+            --shadow: 0 18px 52px rgba(33, 72, 112, 0.14);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+            color: var(--ink);
+            background: #eaf2fb;
+        }
+
+        .page {
+            display: grid;
+            gap: 34px;
+            padding: 34px;
+        }
+
+        .artboard {
+            width: 1440px;
+            height: 900px;
+            overflow: hidden;
+            background: linear-gradient(180deg, #fafdff 0%, #edf5ff 100%);
+            border: 1px solid #cbdceb;
+            border-radius: 26px;
+            box-shadow: var(--shadow);
+        }
+
+        .shell {
+            height: 100%;
+            display: grid;
+            grid-template-rows: 70px 1fr;
+            gap: 18px;
+            padding: 18px;
+        }
+
+        .topbar {
+            display: grid;
+            grid-template-columns: 270px 1fr 270px;
+            align-items: center;
+            gap: 18px;
+            padding: 0 18px;
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid var(--line);
+            border-radius: 18px;
+        }
+
+        .brand, .top-actions, .run-pills, .mini-row, .agent-row, .tool-row, .state-row {
+            display: flex;
+            align-items: center;
+        }
+
+        .brand {
+            gap: 12px;
+            font-weight: 700;
+        }
+
+        .brand-mark {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            display: grid;
+            place-items: center;
+            background: linear-gradient(135deg, #6eaefc, #18a5a7);
+            color: white;
+        }
+
+        .run-pills {
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            height: 30px;
+            padding: 0 12px;
+            border-radius: 999px;
+            background: #eef6ff;
+            border: 1px solid #d7e7f7;
+            color: #496277;
+            font-size: 13px;
+        }
+
+        .dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--green);
+        }
+
+        .top-actions {
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .icon-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: grid;
+            place-items: center;
+            border: 1px solid var(--line);
+            background: #f8fbff;
+            color: #4f6a82;
+            font-weight: 700;
+        }
+
+        .layout {
+            min-height: 0;
+            display: grid;
+            grid-template-columns: 248px minmax(0, 1fr) 330px;
+            gap: 18px;
+        }
+
+        .layout.focus {
+            grid-template-columns: 258px minmax(0, 1fr);
+        }
+
+        .panel {
+            min-height: 0;
+            background: rgba(255, 255, 255, 0.94);
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            overflow: hidden;
+        }
+
+        .side {
+            padding: 18px;
+        }
+
+        .side h3, .right h3, .run-title h2 {
+            margin: 0;
+            font-size: 15px;
+        }
+
+        .session {
+            margin-top: 14px;
+            padding: 12px;
+            border: 1px solid transparent;
+            border-radius: 12px;
+            background: #f7fbff;
+        }
+
+        .session.active {
+            border-color: #b8d6f7;
+            background: #eef6ff;
+        }
+
+        .session-title {
+            font-size: 13px;
+            font-weight: 650;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .session-meta {
+            margin-top: 6px;
+            font-size: 11px;
+            color: var(--muted);
+        }
+
+        .chat {
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr) auto;
+        }
+
+        .chat-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 20px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .chat-head h1 {
+            margin: 0;
+            font-size: 20px;
+            letter-spacing: 0;
+        }
+
+        .segmented {
+            display: flex;
+            gap: 4px;
+            padding: 4px;
+            border-radius: 12px;
+            background: #eef4fb;
+        }
+
+        .segment {
+            padding: 7px 11px;
+            border-radius: 9px;
+            font-size: 12px;
+            color: #5d7186;
+        }
+
+        .segment.active {
+            background: white;
+            color: var(--blue);
+            box-shadow: 0 4px 12px rgba(47, 127, 232, 0.12);
+        }
+
+        .messages {
+            min-height: 0;
+            overflow: hidden;
+            padding: 20px;
+        }
+
+        .bubble {
+            max-width: 76%;
+            margin-bottom: 18px;
+            padding: 14px 16px;
+            border-radius: 16px;
+            font-size: 14px;
+            line-height: 1.7;
+        }
+
+        .bubble.user {
+            margin-left: auto;
+            color: white;
+            background: linear-gradient(135deg, #5aa0f5, #2f7fe8);
+        }
+
+        .assistant-block {
+            display: grid;
+            grid-template-columns: 290px minmax(0, 1fr);
+            gap: 14px;
+            align-items: start;
+        }
+
+        .run-card {
+            border: 1px solid #d8e6f4;
+            border-radius: 14px;
+            background: #f8fbff;
+            overflow: hidden;
+        }
+
+        .run-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 13px;
+            border-bottom: 1px solid #e1edf8;
+        }
+
+        .run-title h2 {
+            font-size: 14px;
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            color: #52708b;
+            background: #eaf3fc;
+            border: 1px solid #d8e8f7;
+        }
+
+        .agent-stack {
+            padding: 12px;
+        }
+
+        .agent-row {
+            gap: 10px;
+            min-height: 42px;
+            padding: 7px 0;
+        }
+
+        .agent-avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 10px;
+            display: grid;
+            place-items: center;
+            color: white;
+            font-size: 11px;
+            font-weight: 800;
+            background: var(--blue);
+        }
+
+        .agent-avatar.cyan { background: var(--cyan); }
+        .agent-avatar.green { background: var(--green); }
+        .agent-avatar.amber { background: var(--amber); }
+        .agent-avatar.violet { background: var(--violet); }
+
+        .agent-main {
+            min-width: 0;
+            flex: 1;
+        }
+
+        .agent-name {
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .agent-action {
+            margin-top: 2px;
+            font-size: 11px;
+            color: var(--muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .meter {
+            width: 44px;
+            height: 5px;
+            border-radius: 999px;
+            background: #e2ebf4;
+            overflow: hidden;
+        }
+
+        .meter span {
+            display: block;
+            height: 100%;
+            border-radius: inherit;
+            background: var(--green);
+        }
+
+        .answer {
+            border: 1px solid #d8e6f4;
+            border-radius: 14px;
+            background: white;
+            overflow: hidden;
+        }
+
+        .answer-status {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 11px 14px;
+            border-bottom: 1px solid #e6eff8;
+            color: #526a81;
+            font-size: 12px;
+        }
+
+        .typing {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .typing:before {
+            content: "";
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--blue);
+            box-shadow: 0 0 0 4px rgba(47, 127, 232, 0.12);
+        }
+
+        .answer-body {
+            padding: 18px 20px;
+            font-size: 15px;
+            line-height: 1.86;
+        }
+
+        .answer-body h2 {
+            margin: 0 0 14px;
+            font-size: 20px;
+        }
+
+        .cursor {
+            display: inline-block;
+            width: 7px;
+            height: 17px;
+            margin-left: 2px;
+            vertical-align: -3px;
+            border-radius: 999px;
+            background: var(--blue);
+        }
+
+        .source-strip {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding: 0 20px 18px;
+        }
+
+        .source-chip {
+            padding: 6px 9px;
+            border-radius: 999px;
+            background: #f2f7fc;
+            border: 1px solid #dce8f5;
+            font-size: 12px;
+            color: #557089;
+        }
+
+        .composer {
+            padding: 14px 18px 18px;
+            border-top: 1px solid var(--line);
+        }
+
+        .input {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-height: 54px;
+            padding: 8px 10px 8px 14px;
+            border-radius: 16px;
+            border: 1px solid #d6e4f2;
+            background: #f8fbff;
+            color: #6a7e92;
+            font-size: 14px;
+        }
+
+        .send {
+            margin-left: auto;
+            width: 38px;
+            height: 38px;
+            border-radius: 12px;
+            display: grid;
+            place-items: center;
+            color: white;
+            background: var(--blue);
+            font-weight: 800;
+        }
+
+        .right {
+            display: grid;
+            grid-template-rows: auto auto 1fr;
+            gap: 14px;
+            padding: 16px;
+        }
+
+        .right-card {
+            padding: 14px;
+            border-radius: 14px;
+            border: 1px solid var(--line);
+            background: #f8fbff;
+        }
+
+        .tool-row {
+            gap: 10px;
+            padding: 9px 0;
+            font-size: 12px;
+            border-bottom: 1px solid #e5eff8;
+        }
+
+        .tool-row:last-child {
+            border-bottom: 0;
+        }
+
+        .tool-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            display: grid;
+            place-items: center;
+            color: white;
+            background: var(--cyan);
+            font-weight: 800;
+            font-size: 11px;
+        }
+
+        .log {
+            display: grid;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .log-item {
+            display: grid;
+            grid-template-columns: 58px 1fr;
+            gap: 10px;
+            font-size: 12px;
+            line-height: 1.55;
+        }
+
+        .time {
+            color: #7c91a5;
+        }
+
+        .graph-wrap {
+            display: grid;
+            grid-template-columns: 330px minmax(0, 1fr);
+            gap: 18px;
+            padding: 20px;
+        }
+
+        .graph {
+            position: relative;
+            height: 610px;
+            border-radius: 16px;
+            border: 1px solid var(--line);
+            background: #f8fbff;
+        }
+
+        .node {
+            position: absolute;
+            width: 128px;
+            padding: 12px;
+            border-radius: 14px;
+            background: white;
+            border: 1px solid #d6e5f4;
+            box-shadow: 0 8px 20px rgba(33, 72, 112, 0.08);
+            text-align: center;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .node small {
+            display: block;
+            margin-top: 5px;
+            color: var(--muted);
+            font-weight: 500;
+        }
+
+        .node.active {
+            border-color: #80b8f2;
+            box-shadow: 0 0 0 5px rgba(47, 127, 232, 0.1);
+        }
+
+        .n1 { left: 101px; top: 32px; }
+        .n2 { left: 32px; top: 190px; }
+        .n3 { right: 32px; top: 190px; }
+        .n4 { left: 101px; bottom: 42px; }
+
+        .line {
+            position: absolute;
+            height: 2px;
+            background: #bfd5eb;
+            transform-origin: left center;
+        }
+
+        .l1 { left: 166px; top: 147px; width: 112px; transform: rotate(118deg); }
+        .l2 { left: 176px; top: 147px; width: 112px; transform: rotate(62deg); }
+        .l3 { left: 96px; top: 304px; width: 138px; transform: rotate(62deg); }
+        .l4 { left: 226px; top: 304px; width: 138px; transform: rotate(118deg); }
+
+        .event-stream {
+            display: grid;
+            gap: 10px;
+        }
+
+        .event {
+            display: grid;
+            grid-template-columns: 82px 1fr auto;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 14px;
+            border-radius: 14px;
+            border: 1px solid #dce8f5;
+            background: white;
+        }
+
+        .event-agent {
+            font-size: 12px;
+            font-weight: 800;
+            color: var(--blue);
+        }
+
+        .event-text {
+            min-width: 0;
+            font-size: 13px;
+            color: #40566c;
+        }
+
+        .event-state {
+            font-size: 11px;
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: #eef6ff;
+            color: #54718d;
+        }
+
+        .review-grid {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            gap: 18px;
+            padding: 20px;
+        }
+
+        .summary-card {
+            padding: 18px;
+            border-radius: 16px;
+            background: white;
+            border: 1px solid var(--line);
+        }
+
+        .state-row {
+            gap: 10px;
+            padding: 12px 0;
+            border-bottom: 1px solid #e5eff8;
+        }
+
+        .state-row:last-child {
+            border-bottom: 0;
+        }
+
+        .check {
+            width: 26px;
+            height: 26px;
+            border-radius: 999px;
+            display: grid;
+            place-items: center;
+            color: white;
+            background: var(--green);
+            font-weight: 800;
+        }
+
+        .risk {
+            background: var(--amber);
+        }
+
+        .score {
+            height: 10px;
+            border-radius: 999px;
+            background: #e4edf6;
+            overflow: hidden;
+        }
+
+        .score span {
+            display: block;
+            height: 100%;
+            width: 86%;
+            background: linear-gradient(90deg, var(--green), var(--cyan));
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <section class="artboard" id="mockup-live">
+            <div class="shell">
+                <header class="topbar">
+                    <div class="brand"><div class="brand-mark">R</div><span>智能知识库平台</span></div>
+                    <div class="run-pills">
+                        <span class="pill"><span class="dot"></span>公文协作</span>
+                        <span class="pill">4 个 Agent 正在协作</span>
+                        <span class="pill">已引用 3 份材料</span>
+                    </div>
+                    <div class="top-actions"><div class="icon-btn">☾</div><div class="icon-btn">!</div><div class="icon-btn">⌘</div></div>
+                </header>
+                <main class="layout">
+                    <aside class="panel side">
+                        <h3>最近会话</h3>
+                        <div class="session active"><div class="session-title">起草园区升级建议</div><div class="session-meta">正在生成 · 2 分钟</div></div>
+                        <div class="session"><div class="session-title">NAS 使用说明</div><div class="session-meta">昨天 16:24</div></div>
+                        <div class="session"><div class="session-title">会议通知模板</div><div class="session-meta">6-07</div></div>
+                    </aside>
+                    <section class="panel chat">
+                        <div class="chat-head">
+                            <h1>智能体对话</h1>
+                            <div class="segmented"><span class="segment">智能客服</span><span class="segment active">公文协作</span></div>
+                        </div>
+                        <div class="messages">
+                            <div class="bubble user">结合知识库内容，起草一份关于“推动示例园区绿色升级”的对策建议，要求结构清晰、有依据。</div>
+                            <div class="assistant-block">
+                                <div class="run-card">
+                                    <div class="run-title"><h2>执行总览</h2><span class="badge">实时</span></div>
+                                    <div class="agent-stack">
+                                        <div class="agent-row"><div class="agent-avatar">ORC</div><div class="agent-main"><div class="agent-name">流程编排</div><div class="agent-action">拆解任务并分配角色</div></div><div class="meter"><span style="width:100%"></span></div></div>
+                                        <div class="agent-row"><div class="agent-avatar cyan">CTX</div><div class="agent-main"><div class="agent-name">上下文</div><div class="agent-action">识别公文类型与约束</div></div><div class="meter"><span style="width:100%"></span></div></div>
+                                        <div class="agent-row"><div class="agent-avatar green">KB</div><div class="agent-main"><div class="agent-name">知识库</div><div class="agent-action">检索园区升级、节能改造材料</div></div><div class="meter"><span style="width:80%"></span></div></div>
+                                        <div class="agent-row"><div class="agent-avatar amber">WRT</div><div class="agent-main"><div class="agent-name">起草生成</div><div class="agent-action">正在生成第二部分</div></div><div class="meter"><span style="width:46%"></span></div></div>
+                                    </div>
+                                </div>
+                                <article class="answer">
+                                    <div class="answer-status"><span class="typing">正文正在流式生成</span><span>预计剩余 18 秒</span></div>
+                                    <div class="answer-body">
+                                        <h2>推动示例园区绿色升级的对策建议</h2>
+                                        <p>示例园区正在推进绿色化与数字化改造，可围绕节能设备、智慧运维和资源循环等方向，形成“试点验证、协同改造、效果评估”的实施路径。</p>
+                                        <p>一、以赛事场景开放带动产品验证。建议建立赛事应用场景清单，优先向本地企业开放智能装备、智慧交通、安防巡检、文旅消费等场景<span class="cursor"></span></p>
+                                    </div>
+                                    <div class="source-strip">
+                                        <span class="source-chip">示例材料 A：园区现状</span>
+                                        <span class="source-chip">示例材料 B：改造方案</span>
+                                        <span class="source-chip">示例材料 C：评估指标</span>
+                                    </div>
+                                </article>
+                            </div>
+                        </div>
+                        <div class="composer"><div class="input">继续追问或要求改写 <span class="send">↑</span></div></div>
+                    </section>
+                    <aside class="panel right">
+                        <div class="right-card">
+                            <h3>工具与证据</h3>
+                            <div class="tool-row"><div class="tool-icon">KB</div><div>知识库检索完成，命中 12 个片段</div></div>
+                            <div class="tool-row"><div class="tool-icon">DOC</div><div>公文结构模板已套用</div></div>
+                            <div class="tool-row"><div class="tool-icon">CHK</div><div>等待 Reviewer 质量检查</div></div>
+                        </div>
+                        <div class="right-card">
+                            <h3>过程日志</h3>
+                            <div class="log">
+                                <div class="log-item"><span class="time">00:02</span><span>识别为对策建议任务</span></div>
+                                <div class="log-item"><span class="time">00:05</span><span>检索政策与单位材料</span></div>
+                                <div class="log-item"><span class="time">00:11</span><span>生成一级标题与论据骨架</span></div>
+                                <div class="log-item"><span class="time">00:24</span><span>正文第 2 部分流式输出中</span></div>
+                            </div>
+                        </div>
+                        <div class="right-card">
+                            <h3>人工确认</h3>
+                            <p style="font-size:13px;line-height:1.7;color:#526a81;margin:12px 0 0;">当前无高风险操作。若导出、覆盖编辑器或调用外部搜索，将在这里请求确认。</p>
+                        </div>
+                    </aside>
+                </main>
+            </div>
+        </section>
+
+        <section class="artboard" id="mockup-agents">
+            <div class="shell">
+                <header class="topbar">
+                    <div class="brand"><div class="brand-mark">R</div><span>智能知识库平台</span></div>
+                    <div class="run-pills">
+                        <span class="pill"><span class="dot"></span>协作图谱</span>
+                        <span class="pill">可暂停 / 可展开事件</span>
+                        <span class="pill">隐藏原始推理，仅显示摘要</span>
+                    </div>
+                    <div class="top-actions"><div class="icon-btn">Ⅱ</div><div class="icon-btn">■</div><div class="icon-btn">⌘</div></div>
+                </header>
+                <main class="layout focus">
+                    <aside class="panel side">
+                        <h3>运行状态</h3>
+                        <div class="session active"><div class="session-title">当前阶段</div><div class="session-meta">Reviewer 正在检查事实依据</div></div>
+                        <div class="session"><div class="session-title">耗时</div><div class="session-meta">42 秒 · 9 个事件</div></div>
+                        <div class="session"><div class="session-title">用户控制</div><div class="session-meta">暂停、停止、仅看最终稿</div></div>
+                    </aside>
+                    <section class="panel chat">
+                        <div class="chat-head">
+                            <h1>Agent 协作过程</h1>
+                            <div class="segmented"><span class="segment active">图谱</span><span class="segment">事件流</span><span class="segment">证据</span></div>
+                        </div>
+                        <div class="graph-wrap">
+                            <div class="graph">
+                                <div class="line l1"></div><div class="line l2"></div><div class="line l3"></div><div class="line l4"></div>
+                                <div class="node n1 active">Orchestrator<small>路由与交接</small></div>
+                                <div class="node n2">Knowledge<small>材料检索</small></div>
+                                <div class="node n3">Writer<small>正文起草</small></div>
+                                <div class="node n4 active">Reviewer<small>依据校验</small></div>
+                            </div>
+                            <div class="event-stream">
+                                <div class="event"><div class="event-agent">ORC</div><div class="event-text">任务被拆成：材料检索、结构规划、正文起草、质量检查。</div><div class="event-state">完成</div></div>
+                                <div class="event"><div class="event-agent">KB</div><div class="event-text">检索“园区升级”“节能改造”“评估指标”相关片段，保留 3 个高相关来源。</div><div class="event-state">完成</div></div>
+                                <div class="event"><div class="event-agent">WRT</div><div class="event-text">根据标题骨架生成首版正文，先流式展示可读版本。</div><div class="event-state">完成</div></div>
+                                <div class="event"><div class="event-agent">CHK</div><div class="event-text">发现“低空经济示范场景”缺少直接来源，建议改为“智能装备与智慧交通场景”。</div><div class="event-state">需关注</div></div>
+                                <div class="event"><div class="event-agent">R1</div><div class="event-text">生成简短复核摘要，不展示模型原始思维链。</div><div class="event-state">进行中</div></div>
+                                <article class="answer" style="margin-top:10px;">
+                                    <div class="answer-status"><span>最终稿预览</span><span>可继续编辑</span></div>
+                                    <div class="answer-body">
+                                        <p>建议把过程默认折叠为“谁做了什么 + 结果如何”，用户需要时再展开参数、来源、耗时与错误。这样既保留透明度，又不会让思考过程压过最终正文。</p>
+                                    </div>
+                                </article>
+                            </div>
+                        </div>
+                    </section>
+                </main>
+            </div>
+        </section>
+
+        <section class="artboard" id="mockup-review">
+            <div class="shell">
+                <header class="topbar">
+                    <div class="brand"><div class="brand-mark">R</div><span>智能知识库平台</span></div>
+                    <div class="run-pills">
+                        <span class="pill"><span class="dot"></span>已完成</span>
+                        <span class="pill">5 步执行</span>
+                        <span class="pill">质量分 86</span>
+                    </div>
+                    <div class="top-actions"><div class="icon-btn">↻</div><div class="icon-btn">↓</div><div class="icon-btn">⌘</div></div>
+                </header>
+                <main class="layout focus">
+                    <aside class="panel side">
+                        <h3>输出操作</h3>
+                        <div class="session active"><div class="session-title">导入编辑器</div><div class="session-meta">保留来源标注</div></div>
+                        <div class="session"><div class="session-title">更正式</div><div class="session-meta">保持结构不变</div></div>
+                        <div class="session"><div class="session-title">补充依据</div><div class="session-meta">聚焦引用与事实</div></div>
+                    </aside>
+                    <section class="panel chat">
+                        <div class="chat-head">
+                            <h1>完成后复盘</h1>
+                            <div class="segmented"><span class="segment active">摘要</span><span class="segment">来源</span><span class="segment">日志</span></div>
+                        </div>
+                        <div class="review-grid">
+                            <article class="answer">
+                                <div class="answer-status"><span>最终回答</span><span>已保存到会话</span></div>
+                                <div class="answer-body">
+                                    <h2>对策建议已生成</h2>
+                                    <p>正文已形成“背景判断、主要问题、对策建议、保障机制”四段结构，并补充了知识库来源。建议下一步由用户确认是否需要按正式公文格式导入编辑器。</p>
+                                    <p>一、明确绿色改造目标。二、分阶段实施设备升级。三、建立效果评估机制。四、完善部门协同与项目跟踪。</p>
+                                </div>
+                                <div class="source-strip">
+                                    <span class="source-chip">复制</span>
+                                    <span class="source-chip">导入编辑器</span>
+                                    <span class="source-chip">补充依据</span>
+                                    <span class="source-chip">重新生成</span>
+                                </div>
+                            </article>
+                            <aside class="summary-card">
+                                <h3>执行摘要</h3>
+                                <div class="state-row"><div class="check">✓</div><div><strong>路由正确</strong><br><span style="font-size:12px;color:#66788f;">识别为公文协作任务</span></div></div>
+                                <div class="state-row"><div class="check">✓</div><div><strong>来源可追溯</strong><br><span style="font-size:12px;color:#66788f;">3 份材料被引用</span></div></div>
+                                <div class="state-row"><div class="check risk">!</div><div><strong>建议人工复核</strong><br><span style="font-size:12px;color:#66788f;">部分政策表述需确认时效</span></div></div>
+                                <p style="margin:18px 0 8px;font-size:12px;color:#66788f;">质量评分</p>
+                                <div class="score"><span></span></div>
+                                <p style="margin:14px 0 0;font-size:13px;line-height:1.7;color:#526a81;">完成态的重点不是展示所有过程，而是给用户一张“可相信、可追溯、可继续操作”的收据。</p>
+                            </aside>
+                        </div>
+                    </section>
+                </main>
+            </div>
+        </section>
+    </div>
+</body>
+</html>

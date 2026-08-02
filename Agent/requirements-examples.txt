@@ -1,0 +1,6 @@
+# Optional archived examples only. Not required by the Flask/LangGraph service.
+crewai>=0.105.0
+dashscope==1.25.21
+langchain==1.3.4
+langchain-community==0.4.2
+langchain-openai==1.2.2

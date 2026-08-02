@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Codex Reference Chat States</title>
+    <style>
+        :root {
+            --ink: #202124;
+            --muted: #777b80;
+            --faint: #a5a8ad;
+            --line: #dedede;
+            --bubble: #f0f0f1;
+            --code: #eeeeee;
+            --blue: #1f7ae0;
+            --green: #0a9f45;
+            --red: #c5221f;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+            color: var(--ink);
+            background: #f5f5f5;
+        }
+
+        .board {
+            width: 1600px;
+            height: 1120px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1px;
+            background: #e4e4e4;
+        }
+
+        .state {
+            position: relative;
+            min-width: 0;
+            background: #fff;
+            overflow: hidden;
+        }
+
+        .label {
+            position: absolute;
+            top: 28px;
+            left: 36px;
+            color: var(--faint);
+            font-size: 18px;
+            letter-spacing: 0;
+        }
+
+        .conversation {
+            width: 92%;
+            max-width: 720px;
+            margin: 70px auto 0;
+        }
+
+        .user-row {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 72px;
+        }
+
+        .user-bubble {
+            max-width: 570px;
+            padding: 18px 24px;
+            border-radius: 24px;
+            background: var(--bubble);
+            font-size: 25px;
+            line-height: 1.45;
+            font-weight: 700;
+        }
+
+        .assistant {
+            font-size: 26px;
+            line-height: 1.72;
+            font-weight: 650;
+            letter-spacing: 0;
+        }
+
+        .elapsed {
+            margin-bottom: 20px;
+            color: #777;
+            font-size: 27px;
+            font-weight: 500;
+        }
+
+        .rule {
+            height: 1px;
+            margin-bottom: 32px;
+            background: var(--line);
+        }
+
+        p {
+            margin: 0 0 26px;
+        }
+
+        .status-line {
+            margin: 30px 0;
+            color: #8d9094;
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .status-line strong {
+            color: #6f7378;
+            font-weight: 650;
+        }
+
+        .code {
+            display: inline-block;
+            padding: 0 10px 2px;
+            border-radius: 9px;
+            background: var(--code);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-weight: 500;
+        }
+
+        .file {
+            color: var(--blue);
+            font-weight: 600;
+        }
+
+        .green {
+            color: var(--green);
+        }
+
+        .red {
+            color: var(--red);
+        }
+
+        .thought-collapsed {
+            display: inline-flex;
+            align-items: center;
+            gap: 14px;
+            margin: 0 0 28px;
+            color: #85888c;
+            font-size: 23px;
+            font-weight: 600;
+        }
+
+        .answer-title {
+            margin: 0 0 24px;
+            font-size: 28px;
+            line-height: 1.35;
+            font-weight: 750;
+        }
+
+        ul {
+            margin: 0 0 28px 30px;
+            padding: 0;
+        }
+
+        li {
+            margin: 14px 0;
+            padding-left: 4px;
+        }
+
+        .actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 28px;
+        }
+
+        .action {
+            padding: 10px 16px;
+            border-radius: 999px;
+            background: #f1f1f1;
+            color: #606367;
+            font-size: 18px;
+            font-weight: 650;
+        }
+
+        .composer {
+            position: absolute;
+            left: 36px;
+            right: 36px;
+            bottom: 28px;
+            min-height: 136px;
+            padding: 24px;
+            border: 1px solid #d9d9d9;
+            border-radius: 30px;
+            color: #b7b9bd;
+            font-size: 26px;
+            font-weight: 700;
+            background: #fff;
+            box-shadow: 0 1px 8px rgba(0, 0, 0, 0.04);
+        }
+
+        .composer-footer {
+            position: absolute;
+            left: 24px;
+            right: 24px;
+            bottom: 18px;
+            display: flex;
+            justify-content: space-between;
+            color: #8a8d91;
+            font-size: 22px;
+            font-weight: 600;
+        }
+
+        .cursor {
+            display: inline-block;
+            width: 7px;
+            height: 30px;
+            margin-left: 4px;
+            border-radius: 999px;
+            background: #1f7ae0;
+            vertical-align: -5px;
+        }
+
+        .fade-bottom {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 190px;
+            pointer-events: none;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0), #fff 54%);
+        }
+    </style>
+</head>
+<body>
+    <main class="board">
+        <section class="state">
+            <div class="label">思考中</div>
+            <div class="conversation">
+                <div class="user-row">
+                    <div class="user-bubble">会话页面的图标都不要，和 Codex 一样，思考时也要显示出来</div>
+                </div>
+
+                <article class="assistant">
+                    <div class="elapsed">已处理 1m 21s</div>
+                    <div class="rule"></div>
+
+                    <p>明白，这次不是再做“仪表盘式”的状态，而是把会话页收成 Codex 那种顺序：先显示简洁的思考过程，思考完成后自动折叠，然后正文从下面开始流式输出。</p>
+
+                    <p>我会把可见过程改成普通文字行，不再显示头像、agent 徽标或装饰图标。用户看到的是“正在理解任务”“正在检索材料”“正在组织正文”这样的工作日志。</p>
+
+                    <div class="status-line">已读取 <strong>3</strong> 份材料，正在整理任务约束</div>
+
+                    <p>显示逻辑也会按 Codex 的节奏来：思考过程先展开；当正文准备好时，思考块自动折叠成一行；然后正文在下方开始逐字流式输出。</p>
+
+                    <div class="status-line">正在准备正文输出 <span class="cursor"></span></div>
+                </article>
+            </div>
+
+            <div class="fade-bottom"></div>
+            <div class="composer">
+                要求后续变更
+                <div class="composer-footer">
+                    <span>添加附件</span>
+                    <span>发送</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="state">
+            <div class="label">正文输出完成</div>
+            <div class="conversation">
+                <div class="user-row">
+                    <div class="user-bubble">思考完了自动折叠思考过程，然后开始流式输出正文</div>
+                </div>
+
+                <article class="assistant">
+                    <div class="thought-collapsed">思考过程已折叠 · 4 步 · 1m 21s</div>
+
+                    <p>可以，这个界面应该长这样：思考过程只在需要时展开，正文输出完成后，页面主体只保留用户真正要读的内容。</p>
+
+                    <p>具体交互顺序是：</p>
+
+                    <ul>
+                        <li>用户发送任务后，先显示简短思考过程。</li>
+                        <li>思考完成时，自动折叠为一行摘要。</li>
+                        <li>正文从折叠行下方开始流式输出。</li>
+                        <li>输出完成后，只保留少量操作入口。</li>
+                    </ul>
+
+                    <p>样式上不再使用图标、头像和 agent 徽标。状态靠文字、时间、分隔线和缩进表达。代码或文件名仍然可以用 <span class="code">chat.js</span> 这种轻量灰底样式。</p>
+
+                </article>
+            </div>
+
+            <div class="fade-bottom"></div>
+            <div class="composer">
+                要求后续变更
+                <div class="composer-footer">
+                    <span>添加附件</span>
+                    <span>发送</span>
+                </div>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

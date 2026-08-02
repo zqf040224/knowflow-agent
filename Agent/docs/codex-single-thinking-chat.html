@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Codex Single Thinking Chat Mockup</title>
+    <style>
+        :root {
+            --ink: #202124;
+            --muted: #777b80;
+            --faint: #a6a8ad;
+            --line: #dedede;
+            --bubble: #f0f0f1;
+            --blue: #1f7ae0;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+            color: var(--ink);
+            background: #fff;
+        }
+
+        .page {
+            position: relative;
+            width: 1600px;
+            height: 1120px;
+            margin: 0 auto;
+            overflow: hidden;
+            background: #fff;
+        }
+
+        .conversation {
+            width: 91%;
+            max-width: 1480px;
+            margin: 34px auto 0;
+        }
+
+        .user-row {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 86px;
+        }
+
+        .user-bubble {
+            max-width: 690px;
+            padding: 18px 26px;
+            border-radius: 25px;
+            background: var(--bubble);
+            font-size: 26px;
+            line-height: 1.42;
+            font-weight: 750;
+        }
+
+        .assistant {
+            width: min(1180px, 100%);
+            font-size: 28px;
+            line-height: 1.72;
+            font-weight: 650;
+            letter-spacing: 0;
+        }
+
+        .elapsed {
+            margin-bottom: 22px;
+            color: #777;
+            font-size: 29px;
+            font-weight: 560;
+        }
+
+        .rule {
+            height: 1px;
+            margin-bottom: 34px;
+            background: var(--line);
+        }
+
+        p {
+            margin: 0 0 28px;
+        }
+
+        .thinking-line {
+            margin: 30px 0;
+            color: #85888d;
+            font-size: 26px;
+            font-weight: 650;
+        }
+
+        .cursor {
+            display: inline-block;
+            width: 7px;
+            height: 30px;
+            margin-left: 4px;
+            border-radius: 999px;
+            background: var(--blue);
+            vertical-align: -5px;
+        }
+
+        .composer {
+            position: absolute;
+            left: 78px;
+            right: 78px;
+            bottom: 22px;
+            min-height: 150px;
+            padding: 28px;
+            border: 1px solid #d8d8d8;
+            border-radius: 34px;
+            background: #fff;
+            color: #b7b9bd;
+            font-size: 28px;
+            font-weight: 750;
+            box-shadow: 0 1px 8px rgba(0, 0, 0, 0.04);
+        }
+
+        .composer-footer {
+            position: absolute;
+            left: 28px;
+            right: 28px;
+            bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            color: #8a8d91;
+            font-size: 23px;
+            font-weight: 650;
+        }
+
+        .fade {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 190px;
+            pointer-events: none;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0), #fff 58%);
+        }
+    </style>
+</head>
+<body>
+    <main class="page">
+        <div class="conversation">
+            <div class="user-row">
+                <div class="user-bubble">会话页面的图标都不要，和 Codex 一样，思考时也要显示出来</div>
+            </div>
+
+            <article class="assistant">
+                <div class="elapsed">已处理 1m 21s</div>
+                <div class="rule"></div>
+
+                <p>明白，这次会把会话页收成 Codex 那种顺序：先显示简洁的思考过程，思考完成后自动折叠，然后正文从下面开始流式输出。</p>
+
+                <p>我会把可见过程改成普通文字行，不再显示头像、agent 徽标、工具图标或装饰图标。用户看到的是工作日志，而不是控制台。</p>
+
+                <div class="thinking-line">正在理解任务，并确认需要去掉所有会话图标</div>
+
+                <p>接下来会整理两种状态：第一，思考中展开显示过程；第二，思考完成后折叠成一行摘要，再开始输出正文。</p>
+
+                <div class="thinking-line">已读取 3 份材料，正在组织正文结构</div>
+
+                <p>视觉上只保留文字、时间、分隔线和缩进。这样用户能知道系统正在做什么，但不会被 agent 名称、徽标和工具卡片打断阅读。</p>
+
+                <div class="thinking-line">正在准备正文输出<span class="cursor"></span></div>
+            </article>
+        </div>
+
+        <div class="fade"></div>
+        <div class="composer">
+            要求后续变更
+            <div class="composer-footer">
+                <span>添加附件</span>
+                <span>发送</span>
+            </div>
+        </div>
+    </main>
+</body>
+</html>

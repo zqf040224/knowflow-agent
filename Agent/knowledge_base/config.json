@@ -1,0 +1,7 @@
+{
+  "version": "3.0",
+  "updated_at": "2026-06-13T00:00:00",
+  "embedding_model": "maidalun1020/bce-embedding-base_v1",
+  "embedding_dim": 768,
+  "total_documents": 0
+}

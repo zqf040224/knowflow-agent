@@ -1,0 +1,30 @@
+services:
+  app:
+    build: .
+    container_name: agent_app
+    working_dir: /app
+    ports:
+      - "${PORT:-5003}:5003"
+    volumes:
+      - .:/app
+      - app_data:/app/data
+      - app_uploads:/app/uploads
+    env_file:
+      - .env
+    restart: always
+
+  kb-init:
+    build: .
+    container_name: agent_kb_init
+    working_dir: /app
+    command: python builder.py --input ./知识库 --output ./knowledge_base
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    profiles:
+      - init
+
+volumes:
+  app_data:
+  app_uploads:

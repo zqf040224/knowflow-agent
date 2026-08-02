@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Codex Single State Chat Mockup</title>
+    <style>
+        :root {
+            --ink: #202124;
+            --muted: #777b80;
+            --faint: #a6a8ad;
+            --line: #dedede;
+            --bubble: #f0f0f1;
+            --code: #eeeeee;
+            --blue: #1f7ae0;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+            color: var(--ink);
+            background: #fff;
+        }
+
+        .page {
+            position: relative;
+            width: 1600px;
+            height: 1120px;
+            margin: 0 auto;
+            overflow: hidden;
+            background: #fff;
+        }
+
+        .conversation {
+            width: 91%;
+            max-width: 1480px;
+            margin: 34px auto 0;
+        }
+
+        .user-row {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 82px;
+        }
+
+        .user-bubble {
+            max-width: 680px;
+            padding: 18px 26px;
+            border-radius: 25px;
+            background: var(--bubble);
+            font-size: 26px;
+            line-height: 1.42;
+            font-weight: 750;
+        }
+
+        .assistant {
+            width: min(1160px, 100%);
+            font-size: 28px;
+            line-height: 1.72;
+            font-weight: 650;
+            letter-spacing: 0;
+        }
+
+        .thought {
+            margin-bottom: 26px;
+            color: #85888d;
+            font-size: 26px;
+            font-weight: 650;
+        }
+
+        p {
+            margin: 0 0 28px;
+        }
+
+        ul {
+            margin: 0 0 30px 34px;
+            padding: 0;
+        }
+
+        li {
+            margin: 14px 0;
+            padding-left: 6px;
+        }
+
+        .code {
+            display: inline-block;
+            padding: 0 10px 2px;
+            border-radius: 9px;
+            background: var(--code);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-weight: 500;
+        }
+
+        .file {
+            color: var(--blue);
+            font-weight: 600;
+        }
+
+        .cursor {
+            display: inline-block;
+            width: 7px;
+            height: 30px;
+            margin-left: 4px;
+            border-radius: 999px;
+            background: var(--blue);
+            vertical-align: -5px;
+        }
+
+        .composer {
+            position: absolute;
+            left: 78px;
+            right: 78px;
+            bottom: 22px;
+            min-height: 150px;
+            padding: 28px;
+            border: 1px solid #d8d8d8;
+            border-radius: 34px;
+            background: #fff;
+            color: #b7b9bd;
+            font-size: 28px;
+            font-weight: 750;
+            box-shadow: 0 1px 8px rgba(0, 0, 0, 0.04);
+        }
+
+        .composer-footer {
+            position: absolute;
+            left: 28px;
+            right: 28px;
+            bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            color: #8a8d91;
+            font-size: 23px;
+            font-weight: 650;
+        }
+
+        .fade {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 190px;
+            pointer-events: none;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0), #fff 58%);
+        }
+    </style>
+</head>
+<body>
+    <main class="page">
+        <div class="conversation">
+            <div class="user-row">
+                <div class="user-bubble">会话页面的图标都不要，和 Codex 一样，思考完自动折叠后输出正文</div>
+            </div>
+
+            <article class="assistant">
+                <div class="thought">思考过程已折叠 · 4 步 · 1m 21s</div>
+
+                <p>可以，最终页面应该是单栏顺序，而不是左右对照。用户只看到同一个会话流在不同阶段自然变化：先显示思考过程，思考完成后折叠成一行，然后正文从下面开始流式输出。</p>
+
+                <p>这个版本的界面规则是：</p>
+
+                <ul>
+                    <li>不显示头像、agent 徽标、工具图标或装饰图标。</li>
+                    <li>思考中只用普通文字展示过程，例如“正在理解任务”“正在检索材料”。</li>
+                    <li>思考完成后自动折叠为一行摘要，保留耗时和步骤数。</li>
+                    <li>正文在折叠摘要下方开始输出，完成后页面主体只保留正文。</li>
+                </ul>
+
+                <p>代码、文件名或来源可以用 <span class="code">chat.js</span> 这种轻量灰底文本表达；如果需要引用文件，则直接写成 <span class="file">Agent/static/js/chat.js</span> 这样的文字链接，不再做成卡片。</p>
+
+                <p>这样会更像 Codex 的输出：过程可见但不抢戏，正文是主角，界面靠排版、间距和文字状态建立秩序<span class="cursor"></span></p>
+            </article>
+        </div>
+
+        <div class="fade"></div>
+        <div class="composer">
+            要求后续变更
+            <div class="composer-footer">
+                <span>添加附件</span>
+                <span>发送</span>
+            </div>
+        </div>
+    </main>
+</body>
+</html>

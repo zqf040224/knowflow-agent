@@ -1,0 +1,2768 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理后台 - 智能知识库平台</title>
+    <script>
+        (function () {
+            var theme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
+    <style>
+        :root {
+            --bg-page: #eef5ff;
+            --bg-panel: #ffffff;
+            --bg-soft: #f3f8ff;
+            --bg-soft-strong: #e4f0ff;
+            --bg-border: #d9e8fb;
+            --text-primary: #17304d;
+            --text-secondary: #5f7794;
+            --text-tertiary: #8ca2bc;
+            --accent-color: #6eaefc;
+            --accent-strong: #2f7fe8;
+            --success-soft: rgba(56, 161, 105, 0.14);
+            --success-text: #2f855a;
+            --danger-soft: rgba(239, 68, 68, 0.12);
+            --danger-text: #dc2626;
+            --warning-soft: rgba(217, 119, 6, 0.12);
+            --warning-text: #b45309;
+            --shadow-sm: 0 8px 22px rgba(90, 132, 188, 0.08);
+            --shadow-md: 0 16px 36px rgba(90, 132, 188, 0.12);
+            --radius-md: 18px;
+            --radius-lg: 24px;
+            --transition: all 0.22s ease;
+            --font-sans: "SF Pro Display", "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            color-scheme: light;
+        }
+
+        :root[data-theme="dark"] {
+            --bg-page: #0e1726;
+            --bg-panel: #152236;
+            --bg-soft: #1c2b42;
+            --bg-soft-strong: #243954;
+            --bg-border: #2b4364;
+            --text-primary: #eaf3ff;
+            --text-secondary: #adc2dc;
+            --text-tertiary: #7f98b7;
+            --accent-color: #79b8ff;
+            --accent-strong: #9dccff;
+            --success-soft: rgba(72, 187, 120, 0.16);
+            --success-text: #86efac;
+            --danger-soft: rgba(248, 113, 113, 0.14);
+            --danger-text: #fca5a5;
+            --warning-soft: rgba(245, 158, 11, 0.14);
+            --warning-text: #fcd34d;
+            --shadow-sm: 0 8px 22px rgba(0, 0, 0, 0.18);
+            --shadow-md: 0 18px 42px rgba(0, 0, 0, 0.26);
+            color-scheme: dark;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            font-family: var(--font-sans);
+            color: var(--text-primary);
+            background:
+                radial-gradient(circle at 16% 12%, rgba(130, 190, 255, 0.3), transparent 28%),
+                radial-gradient(circle at 88% 2%, rgba(190, 221, 255, 0.38), transparent 28%),
+                linear-gradient(180deg, #fbfdff 0%, var(--bg-page) 56%, #edf5ff 100%);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        :root[data-theme="dark"] body {
+            background:
+                radial-gradient(circle at 16% 12%, rgba(73, 128, 190, 0.26), transparent 30%),
+                radial-gradient(circle at 88% 2%, rgba(58, 112, 174, 0.2), transparent 28%),
+                linear-gradient(180deg, #0b1220 0%, var(--bg-page) 56%, #0a1321 100%);
+        }
+
+        button,
+        input,
+        select {
+            font: inherit;
+        }
+
+        button {
+            border: 0;
+            cursor: pointer;
+        }
+
+        .admin-shell {
+            min-height: 100vh;
+            display: grid;
+            grid-template-columns: 280px minmax(0, 1fr);
+            gap: 14px;
+            padding: 16px;
+        }
+
+        .sidebar {
+            position: sticky;
+            top: 16px;
+            height: calc(100vh - 32px);
+            display: flex;
+            flex-direction: column;
+            padding: 16px;
+            border: 1px solid var(--bg-border);
+            border-radius: 24px;
+            background: rgba(255, 255, 255, 0.86);
+            box-shadow: var(--shadow-sm);
+        }
+
+        :root[data-theme="dark"] .sidebar,
+        :root[data-theme="dark"] .topbar,
+        :root[data-theme="dark"] .card,
+        :root[data-theme="dark"] .modal-card {
+            background: rgba(21, 34, 54, 0.92);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 4px 4px 18px;
+            border-bottom: 1px solid var(--bg-border);
+        }
+
+        .brand-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-weight: 700;
+            background: linear-gradient(135deg, #79b6ff 0%, #4f96f5 100%);
+            box-shadow: 0 12px 24px rgba(79, 150, 245, 0.22);
+        }
+
+        .brand-kicker {
+            color: var(--text-secondary);
+            font-size: 12px;
+            letter-spacing: 0.05em;
+        }
+
+        .brand-title {
+            margin-top: 3px;
+            font-size: 17px;
+            font-weight: 650;
+        }
+
+        .nav {
+            display: grid;
+            gap: 8px;
+            margin-top: 18px;
+        }
+
+        .nav-btn,
+        .side-action,
+        .theme-toggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-height: 42px;
+            padding: 10px 12px;
+            border-radius: 14px;
+            color: var(--text-secondary);
+            background: transparent;
+            transition: var(--transition);
+        }
+
+        .nav-btn:hover,
+        .nav-btn.active,
+        .side-action:hover,
+        .theme-toggle:hover {
+            color: var(--text-primary);
+            background: var(--bg-soft);
+        }
+
+        .nav-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            background: var(--text-tertiary);
+        }
+
+        .nav-btn.active .nav-dot {
+            background: var(--accent-color);
+            box-shadow: 0 0 0 5px rgba(110, 174, 252, 0.14);
+        }
+
+        .sidebar-footer {
+            display: grid;
+            gap: 8px;
+            margin-top: auto;
+            padding-top: 16px;
+            border-top: 1px solid var(--bg-border);
+        }
+
+        .main {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .topbar {
+            min-height: 78px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            padding: 16px 20px;
+            border: 1px solid var(--bg-border);
+            border-radius: 24px;
+            background: rgba(255, 255, 255, 0.88);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .page-eyebrow {
+            color: var(--accent-strong);
+            font-size: 12px;
+            font-weight: 650;
+            letter-spacing: 0.08em;
+        }
+
+        .page-title {
+            margin-top: 4px;
+            font-size: 26px;
+            letter-spacing: -0.035em;
+        }
+
+        .top-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .admin-profile {
+            padding: 9px 12px;
+            border: 1px solid var(--bg-border);
+            border-radius: 999px;
+            background: var(--bg-soft);
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: grid;
+            gap: 14px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .card {
+            border: 1px solid var(--bg-border);
+            border-radius: 22px;
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+        }
+
+        .stat-card {
+            padding: 18px;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        .stat-number {
+            margin-top: 8px;
+            color: var(--accent-strong);
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: -0.04em;
+        }
+
+        .stat-note {
+            margin-top: 6px;
+            color: var(--text-tertiary);
+            font-size: 12px;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            padding: 18px 20px;
+            border-bottom: 1px solid var(--bg-border);
+        }
+
+        .card-title {
+            font-size: 17px;
+            font-weight: 650;
+        }
+
+        .card-desc {
+            margin-top: 5px;
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        .card-body {
+            padding: 20px;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: minmax(320px, 0.92fr) minmax(0, 1.08fr);
+            gap: 14px;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .form-group.full {
+            grid-column: 1 / -1;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        input,
+        select {
+            width: 100%;
+            min-height: 44px;
+            padding: 11px 13px;
+            border: 1px solid var(--bg-border);
+            border-radius: 14px;
+            outline: none;
+            color: var(--text-primary);
+            background: var(--bg-soft);
+            transition: var(--transition);
+        }
+
+        input:focus,
+        select:focus {
+            border-color: var(--accent-color);
+            background: var(--bg-panel);
+            box-shadow: 0 0 0 4px rgba(110, 174, 252, 0.14);
+        }
+
+        .btn {
+            min-height: 40px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 14px;
+            border-radius: 14px;
+            color: var(--text-primary);
+            background: var(--bg-soft);
+            border: 1px solid var(--bg-border);
+            transition: var(--transition);
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+        }
+
+        .btn-primary {
+            color: #fff;
+            background: linear-gradient(135deg, #78b7ff 0%, #3f8ced 100%);
+            border-color: transparent;
+            box-shadow: 0 14px 28px rgba(63, 140, 237, 0.18);
+        }
+
+        .btn-danger {
+            color: var(--danger-text);
+            background: var(--danger-soft);
+            border-color: rgba(239, 68, 68, 0.18);
+        }
+
+        .btn-small {
+            min-height: 34px;
+            padding: 7px 10px;
+            border-radius: 11px;
+            font-size: 12px;
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 860px;
+        }
+
+        th,
+        td {
+            padding: 13px 16px;
+            border-bottom: 1px solid var(--bg-border);
+            text-align: left;
+            vertical-align: middle;
+            font-size: 13px;
+        }
+
+        th {
+            color: var(--text-secondary);
+            font-weight: 650;
+            background: var(--bg-soft);
+        }
+
+        tbody tr:hover {
+            background: rgba(110, 174, 252, 0.06);
+        }
+
+        .muted {
+            color: var(--text-tertiary);
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .badge-admin,
+        .badge-info {
+            color: var(--accent-strong);
+            background: rgba(110, 174, 252, 0.16);
+        }
+
+        .badge-user,
+        .badge-active,
+        .badge-ok {
+            color: var(--success-text);
+            background: var(--success-soft);
+        }
+
+        .badge-inactive,
+        .badge-bad {
+            color: var(--danger-text);
+            background: var(--danger-soft);
+        }
+
+        .badge-warning {
+            color: var(--warning-text);
+            background: var(--warning-soft);
+        }
+
+        .actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .log-list,
+        .health-grid,
+        .ingestion-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .log-item,
+        .health-item,
+        .ingestion-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 13px 14px;
+            border: 1px solid var(--bg-border);
+            border-radius: 16px;
+            background: var(--bg-soft);
+        }
+
+        .log-main strong,
+        .health-main strong,
+        .ingestion-main strong {
+            display: block;
+            font-size: 14px;
+        }
+
+        .log-main span,
+        .health-main span,
+        .ingestion-main span {
+            display: block;
+            margin-top: 4px;
+            color: var(--text-secondary);
+            font-size: 12px;
+            word-break: break-all;
+        }
+
+        .ingestion-main {
+            min-width: 0;
+        }
+
+        .ingestion-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 7px;
+        }
+
+        .ingestion-meta .badge {
+            padding: 4px 8px;
+            font-size: 11px;
+        }
+
+        .issue-list {
+            display: grid;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .issue-item {
+            padding: 10px 12px;
+            border-radius: 14px;
+            color: var(--danger-text);
+            background: var(--danger-soft);
+            font-size: 12px;
+            line-height: 1.6;
+            word-break: break-all;
+        }
+
+        .vector-map-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 310px;
+            gap: 14px;
+        }
+
+        .vector-canvas-wrap {
+            position: relative;
+            min-height: 480px;
+            border: 1px solid var(--bg-border);
+            border-radius: 18px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.78), var(--bg-soft));
+            overflow: hidden;
+        }
+
+        :root[data-theme="dark"] .vector-canvas-wrap {
+            background: linear-gradient(180deg, rgba(28, 43, 66, 0.8), rgba(18, 31, 50, 0.95));
+        }
+
+        #vectorMapCanvas {
+            width: 100%;
+            height: 480px;
+            display: block;
+            cursor: grab;
+        }
+
+        #vectorMapCanvas:active {
+            cursor: grabbing;
+        }
+
+        .vector-map-hint {
+            position: absolute;
+            left: 14px;
+            bottom: 12px;
+            padding: 6px 9px;
+            border-radius: 999px;
+            color: var(--text-secondary);
+            background: rgba(255,255,255,0.78);
+            border: 1px solid var(--bg-border);
+            font-size: 12px;
+        }
+
+        :root[data-theme="dark"] .vector-map-hint {
+            background: rgba(21, 34, 54, 0.82);
+        }
+
+        .vector-side {
+            display: grid;
+            gap: 12px;
+            align-content: start;
+        }
+
+        .vector-detail,
+        .vector-legend {
+            padding: 14px;
+            border: 1px solid var(--bg-border);
+            border-radius: 16px;
+            background: var(--bg-soft);
+        }
+
+        .vector-detail h4,
+        .vector-legend h4 {
+            margin-bottom: 9px;
+            font-size: 14px;
+        }
+
+        .vector-detail p,
+        .vector-legend p {
+            margin-top: 6px;
+            color: var(--text-secondary);
+            font-size: 12px;
+            line-height: 1.6;
+            word-break: break-all;
+        }
+
+        .legend-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 8px;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 999px;
+            background: var(--accent-color);
+        }
+
+        .empty-state {
+            padding: 24px;
+            color: var(--text-tertiary);
+            text-align: center;
+        }
+
+        .toast {
+            position: fixed;
+            right: 22px;
+            bottom: 22px;
+            z-index: 1100;
+            max-width: min(420px, calc(100vw - 44px));
+            padding: 13px 16px;
+            border-radius: 16px;
+            color: var(--text-primary);
+            background: var(--bg-panel);
+            border: 1px solid var(--bg-border);
+            box-shadow: var(--shadow-md);
+            opacity: 0;
+            transform: translateY(12px);
+            pointer-events: none;
+            transition: var(--transition);
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .modal {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: rgba(216, 232, 250, 0.66);
+            backdrop-filter: blur(12px);
+        }
+
+        :root[data-theme="dark"] .modal {
+            background: rgba(3, 9, 18, 0.58);
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-card {
+            width: min(420px, 100%);
+            padding: 24px;
+            border: 1px solid var(--bg-border);
+            border-radius: 22px;
+            background: var(--bg-panel);
+            box-shadow: var(--shadow-md);
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            margin-bottom: 18px;
+        }
+
+        .close-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 12px;
+            color: var(--text-secondary);
+            background: var(--bg-soft);
+        }
+
+        @media (max-width: 980px) {
+            .admin-shell {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                position: relative;
+                top: auto;
+                height: auto;
+            }
+
+            .nav,
+            .sidebar-footer {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .stats-grid,
+            .grid-2,
+            .vector-map-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .vector-canvas-wrap {
+                min-height: 380px;
+            }
+
+            #vectorMapCanvas {
+                height: 380px;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .admin-shell {
+                padding: 10px;
+            }
+
+            .topbar,
+            .card-header {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .form-grid,
+            .nav,
+            .sidebar-footer {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="admin-shell">
+        <aside class="sidebar">
+            <div class="brand">
+                <span class="brand-icon">管</span>
+                <div>
+                    <p class="brand-kicker">智能知识库平台</p>
+                    <h1 class="brand-title">管理后台</h1>
+                </div>
+            </div>
+
+            <nav class="nav" aria-label="管理导航">
+                <button class="nav-btn active" type="button" data-tab="dashboard" onclick="showTab('dashboard', this)">
+                    <span class="nav-dot"></span> 系统概览
+                </button>
+                <button class="nav-btn" type="button" data-tab="beta" onclick="showTab('beta', this)">
+                    <span class="nav-dot"></span> 内测数据
+                </button>
+                <button class="nav-btn" type="button" data-tab="tokens" onclick="showTab('tokens', this)">
+                    <span class="nav-dot"></span> Token 检测
+                </button>
+                <button class="nav-btn" type="button" data-tab="users" onclick="showTab('users', this)">
+                    <span class="nav-dot"></span> 账号管理
+                </button>
+                <button class="nav-btn" type="button" data-tab="knowledge" onclick="showTab('knowledge', this)">
+                    <span class="nav-dot"></span> 知识库状态
+                </button>
+                <button class="nav-btn" type="button" data-tab="logs" onclick="showTab('logs', this)">
+                    <span class="nav-dot"></span> 登录日志
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button class="theme-toggle" id="themeToggle" type="button" onclick="toggleTheme()" title="切换深色模式">
+                    <span class="theme-icon">☾</span> 主题切换
+                </button>
+                <button class="side-action" type="button" onclick="goToChat()">返回工作区</button>
+                <button class="side-action" type="button" onclick="logout()">退出登录</button>
+            </div>
+        </aside>
+
+        <main class="main">
+            <header class="topbar">
+                <div>
+                    <p class="page-eyebrow">ADMIN CONSOLE</p>
+                    <h2 class="page-title" id="pageTitle">系统概览</h2>
+                </div>
+                <div class="top-actions">
+                    <span class="admin-profile" id="currentUser">管理员</span>
+                    <button class="btn" type="button" onclick="refreshCurrentTab()">刷新</button>
+                    <button class="btn btn-primary" type="button" onclick="showTab('users', document.querySelector('[data-tab=users]')); scrollToCreateUser()">新建账号</button>
+                </div>
+            </header>
+
+            <section id="dashboard" class="tab-content active">
+                <div class="stats-grid">
+                    <article class="card stat-card">
+                        <p class="stat-label">总用户数</p>
+                        <div class="stat-number" id="totalUsers">-</div>
+                        <p class="stat-note">含普通用户与管理员</p>
+                    </article>
+                    <article class="card stat-card">
+                        <p class="stat-label">会话数量</p>
+                        <div class="stat-number" id="activeUsers">-</div>
+                        <p class="stat-note">系统累计会话记录</p>
+                    </article>
+                    <article class="card stat-card">
+                        <p class="stat-label">今日登录记录</p>
+                        <div class="stat-number" id="todayLogins">-</div>
+                        <p class="stat-note">来自登录审计日志</p>
+                    </article>
+                    <article class="card stat-card">
+                        <p class="stat-label">总会话数</p>
+                        <div class="stat-number" id="totalSessions">-</div>
+                        <p class="stat-note">用于观察系统使用情况</p>
+                    </article>
+                </div>
+
+                <div class="grid-2">
+                    <article class="card">
+                        <div class="card-header">
+                            <div>
+                                <h3 class="card-title">管理员权限</h3>
+                                <p class="card-desc">后台仅管理员账号可访问，普通用户会被权限校验拦截。</p>
+                            </div>
+                            <span class="badge badge-ok">已启用</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="health-grid">
+                                <div class="health-item">
+                                    <div class="health-main">
+                                        <strong>账号注册</strong>
+                                        <span>管理员可创建普通用户或管理员账号。</span>
+                                    </div>
+                                    <span class="badge badge-info">可用</span>
+                                </div>
+                                <div class="health-item">
+                                    <div class="health-main">
+                                        <strong>状态管理</strong>
+                                        <span>支持禁用、启用账号，保护系统入口。</span>
+                                    </div>
+                                    <span class="badge badge-info">可用</span>
+                                </div>
+                                <div class="health-item">
+                                    <div class="health-main">
+                                        <strong>密码重置</strong>
+                                        <span>管理员可为用户重置初始密码。</span>
+                                    </div>
+                                    <span class="badge badge-info">可用</span>
+                                </div>
+                            </div>
+                        </div>
+                    </article>
+
+                    <article class="card">
+                        <div class="card-header">
+                            <div>
+                                <h3 class="card-title">知识库健康概览</h3>
+                                <p class="card-desc">快速查看索引、文本块和检索组件状态。</p>
+                            </div>
+                            <button class="btn btn-small" type="button" onclick="showTab('knowledge', document.querySelector('[data-tab=knowledge]'))">查看详情</button>
+                        </div>
+                        <div class="card-body">
+                            <div class="health-grid" id="dashboardHealth">
+                                <div class="empty-state">正在加载知识库状态...</div>
+                            </div>
+                        </div>
+                    </article>
+                </div>
+            </section>
+
+            <section id="beta" class="tab-content">
+                <div class="stats-grid">
+                    <article class="card stat-card">
+                        <p class="stat-label">参与用户</p>
+                        <div class="stat-number" id="betaActiveUsers">-</div>
+                        <p class="stat-note">有登录、会话或反馈的用户</p>
+                    </article>
+                    <article class="card stat-card">
+                        <p class="stat-label">总消息数</p>
+                        <div class="stat-number" id="betaTotalMessages">-</div>
+                        <p class="stat-note">用于观察真实使用强度</p>
+                    </article>
+                    <article class="card stat-card">
+                        <p class="stat-label">今日消息</p>
+                        <div class="stat-number" id="betaTodayMessages">-</div>
+                        <p class="stat-note">当天用户交互量</p>
+                    </article>
+                    <article class="card stat-card">
+                        <p class="stat-label">反馈数量</p>
+                        <div class="stat-number" id="betaFeedbackCount">-</div>
+                        <p class="stat-note">今日 <span id="betaTodayFeedback">-</span> 条，待处理 <span id="betaPendingFeedback">-</span>，均分 <span id="betaAvgRating">-</span></p>
+                    </article>
+                </div>
+
+                <article class="card">
+                    <div class="card-header">
+                        <div>
+                            <h3 class="card-title">用户使用数据</h3>
+                            <p class="card-desc">按用户汇总会话、消息、反馈和最后活跃时间，用于判断内测覆盖面。</p>
+                        </div>
+                        <button class="btn" type="button" onclick="loadBetaData()">刷新数据</button>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>用户</th>
+                                    <th>部门</th>
+                                    <th>角色</th>
+                                    <th>会话</th>
+                                    <th>消息</th>
+                                    <th>今日消息</th>
+                                    <th>反馈</th>
+                                    <th>最后活跃</th>
+                                </tr>
+                            </thead>
+                            <tbody id="betaUserTable">
+                                <tr><td colspan="8" class="empty-state">正在加载用户数据...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </article>
+
+                <div class="grid-2">
+                    <article class="card">
+                        <div class="card-header">
+                            <div>
+                                <h3 class="card-title">近期用户反馈</h3>
+                                <p class="card-desc">来自工作台的内测反馈，自动带上会话、页面和用户信息。</p>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="log-list" id="betaFeedbackList">
+                                <div class="empty-state">正在加载反馈...</div>
+                            </div>
+                        </div>
+                    </article>
+
+                    <article class="card">
+                        <div class="card-header">
+                            <div>
+                                <h3 class="card-title">最近会话</h3>
+                                <p class="card-desc">用于快速判断用户正在测试哪些真实任务。</p>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="log-list" id="betaSessionList">
+                                <div class="empty-state">正在加载会话...</div>
+                            </div>
+                        </div>
+                    </article>
+                </div>
+            </section>
+
+            <section id="tokens" class="tab-content">
+                <div class="stats-grid">
+                    <article class="card stat-card">
+                        <p class="stat-label">总 Token</p>
+                        <div class="stat-number" id="tokenTotal">-</div>
+                        <p class="stat-note">估算输入与输出合计</p>
+                    </article>
+                    <article class="card stat-card">
+                        <p class="stat-label">今日 Token</p>
+                        <div class="stat-number" id="tokenToday">-</div>
+                        <p class="stat-note">今日调用 <span id="tokenTodayCalls">-</span> 次</p>
+                    </article>
+                    <article class="card stat-card">
+                        <p class="stat-label">总调用</p>
+                        <div class="stat-number" id="tokenCalls">-</div>
+                        <p class="stat-note">LLM 调用次数</p>
+                    </article>
+                    <article class="card stat-card">
+                        <p class="stat-label">平均耗时</p>
+                        <div class="stat-number" id="tokenAvgDuration">-</div>
+                        <p class="stat-note">按调用平均</p>
+                    </article>
+                </div>
+
+                <div class="grid-2">
+                    <article class="card">
+                        <div class="card-header">
+                            <div>
+                                <h3 class="card-title">按用户统计</h3>
+                                <p class="card-desc">观察内测用户的模型使用强度和长文本请求。</p>
+                            </div>
+                            <button class="btn" type="button" onclick="loadTokenUsage()">刷新数据</button>
+                        </div>
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>用户</th>
+                                        <th>部门</th>
+                                        <th>调用</th>
+                                        <th>输入</th>
+                                        <th>输出</th>
+                                        <th>总 Token</th>
+                                        <th>最近使用</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tokenUserTable">
+                                    <tr><td colspan="7" class="empty-state">正在加载 Token 数据...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </article>
+
+                    <article class="card">
+                        <div class="card-header">
+                            <div>
+                                <h3 class="card-title">按 Agent / 模型统计</h3>
+                                <p class="card-desc">定位最消耗 Token 的模式、Agent 和模型。</p>
+                            </div>
+                        </div>
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>模式</th>
+                                        <th>Agent</th>
+                                        <th>模型</th>
+                                        <th>调用</th>
+                                        <th>总 Token</th>
+                                        <th>均耗时</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tokenAgentTable">
+                                    <tr><td colspan="6" class="empty-state">正在加载 Token 数据...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </article>
+                </div>
+
+                <article class="card">
+                    <div class="card-header">
+                        <div>
+                            <h3 class="card-title">最近 Token 明细</h3>
+                            <p class="card-desc">每次模型调用的估算输入、输出、推理字符和耗时。</p>
+                        </div>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>用户</th>
+                                    <th>模式</th>
+                                    <th>Agent</th>
+                                    <th>模型</th>
+                                    <th>输入</th>
+                                    <th>输出</th>
+                                    <th>总 Token</th>
+                                    <th>耗时</th>
+                                    <th>状态</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tokenRecentTable">
+                                <tr><td colspan="10" class="empty-state">正在加载 Token 明细...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </article>
+            </section>
+
+            <section id="users" class="tab-content">
+                <div class="grid-2">
+                    <article class="card" id="createUserCard">
+                        <div class="card-header">
+                            <div>
+                                <h3 class="card-title">注册账号</h3>
+                                <p class="card-desc">创建后用户可直接使用账号密码登录平台。</p>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <form class="form-grid" id="createUserForm">
+                                <div class="form-group">
+                                    <label for="newUsername">用户名</label>
+                                    <input type="text" id="newUsername" autocomplete="off" placeholder="例如：zhangsan" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="newPassword">初始密码</label>
+                                    <input type="password" id="newPassword" placeholder="至少 6 位" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="newName">姓名</label>
+                                    <input type="text" id="newName" placeholder="真实姓名或显示名">
+                                </div>
+                                <div class="form-group">
+                                    <label for="newDepartment">部门</label>
+                                    <select id="newDepartment">
+                                        <option value="">正在加载部门...</option>
+                                    </select>
+                                </div>
+                                <div class="form-group full">
+                                    <label for="newRole">角色</label>
+                                    <select id="newRole">
+                                        <option value="user">普通用户</option>
+                                        <option value="admin">管理员</option>
+                                    </select>
+                                </div>
+                                <div class="form-group full">
+                                    <button class="btn btn-primary" type="submit">创建账号</button>
+                                </div>
+                            </form>
+                        </div>
+                    </article>
+
+                    <article class="card">
+                        <div class="card-header">
+                            <div>
+                                <h3 class="card-title">账号说明</h3>
+                                <p class="card-desc">普通用户可使用知识库与会话功能；管理员可进入本后台。</p>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="health-grid">
+                                <div class="health-item">
+                                    <div class="health-main">
+                                        <strong>普通用户</strong>
+                                        <span>适合日常检索、问答、上传临时材料和生成文档。</span>
+                                    </div>
+                                    <span class="badge badge-user">user</span>
+                                </div>
+                                <div class="health-item">
+                                    <div class="health-main">
+                                        <strong>管理员</strong>
+                                        <span>可管理账号、查看日志、检查知识库索引状态。</span>
+                                    </div>
+                                    <span class="badge badge-admin">admin</span>
+                                </div>
+                            </div>
+                        </div>
+                    </article>
+                </div>
+
+                <article class="card">
+                    <div class="card-header">
+                        <div>
+                            <h3 class="card-title">用户列表</h3>
+                            <p class="card-desc">启停账号、重置密码和查看最后登录时间。</p>
+                        </div>
+                        <button class="btn" type="button" onclick="loadUsers()">刷新用户</button>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>用户名</th>
+                                    <th>姓名</th>
+                                    <th>部门</th>
+                                    <th>角色</th>
+                                    <th>状态</th>
+                                    <th>密码状态</th>
+                                    <th>最后登录</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="userTable">
+                                <tr><td colspan="8" class="empty-state">正在加载用户...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </article>
+            </section>
+
+            <section id="knowledge" class="tab-content">
+                <article class="card">
+                    <div class="card-header">
+                        <div>
+                            <h3 class="card-title">知识库文件管理</h3>
+                            <p class="card-desc">按文件管理向量、结构化表格、权限和重建状态。</p>
+                        </div>
+                        <button class="btn" type="button" onclick="loadKnowledgeFiles()">刷新文件</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="filters" style="display:grid; grid-template-columns: 1.5fr repeat(3, minmax(120px, 1fr)) auto; gap:10px; margin-bottom:14px;">
+                            <input id="knowledgeFileSearch" type="search" placeholder="搜索文件、分类、部门或哈希">
+                            <select id="knowledgeFileStatus">
+                                <option value="">全部状态</option>
+                                <option value="completed">已完成</option>
+                                <option value="failed">失败</option>
+                                <option value="started">入库中</option>
+                                <option value="structured_indexed">结构化完成</option>
+                                <option value="archived">已归档</option>
+                                <option value="legacy">历史索引</option>
+                            </select>
+                            <select id="knowledgeFileType">
+                                <option value="">全部类型</option>
+                                <option value="document">文档</option>
+                                <option value="spreadsheet">报表</option>
+                            </select>
+                            <select id="knowledgeFileAccess">
+                                <option value="">全部权限</option>
+                                <option value="public">public</option>
+                                <option value="internal">internal</option>
+                                <option value="restricted">restricted</option>
+                                <option value="admin">admin</option>
+                            </select>
+                            <button class="btn btn-primary" type="button" onclick="loadKnowledgeFiles()">筛选</button>
+                        </div>
+                        <div class="ingestion-list" id="knowledgeFileList">
+                            <div class="empty-state">正在加载知识库文件...</div>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="card">
+                    <div class="card-header">
+                        <div>
+                            <h3 class="card-title">知识库操作审计</h3>
+                            <p class="card-desc">记录删除、重建和权限编辑的操作者、结果和备份位置。</p>
+                        </div>
+                        <button class="btn" type="button" onclick="loadKnowledgeAudit()">刷新审计</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="ingestion-list" id="knowledgeAuditList">
+                            <div class="empty-state">正在加载操作审计...</div>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="card">
+                    <div class="card-header">
+                        <div>
+                            <h3 class="card-title">向量三维地图</h3>
+                            <p class="card-desc">把知识库 embedding 降维到 3D 坐标，用于查看文件片段分布和相邻关系。</p>
+                        </div>
+                        <button class="btn" type="button" onclick="loadVectorMap()">刷新地图</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="vector-map-layout">
+                            <div class="vector-canvas-wrap">
+                                <canvas id="vectorMapCanvas" width="960" height="540"></canvas>
+                                <div class="vector-map-hint">拖拽旋转 · 滚轮缩放 · 点击查看文件</div>
+                            </div>
+                            <aside class="vector-side">
+                                <div class="vector-detail" id="vectorMapSummary">
+                                    <h4>向量概览</h4>
+                                    <p>正在加载向量地图...</p>
+                                </div>
+                                <div class="vector-detail" id="vectorPointDetail">
+                                    <h4>选中点</h4>
+                                    <p>点击坐标系中的点查看文件、分类、片段和报表行号。</p>
+                                </div>
+                                <div class="vector-legend">
+                                    <h4>图例</h4>
+                                    <div class="legend-row"><span class="legend-dot" style="background:#3f8ced"></span>普通文档</div>
+                                    <div class="legend-row"><span class="legend-dot" style="background:#2f9e69"></span>报表数据</div>
+                                    <div class="legend-row"><span class="legend-dot" style="background:#d97706"></span>当前选中</div>
+                                </div>
+                            </aside>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="card">
+                    <div class="card-header">
+                        <div>
+                            <h3 class="card-title">知识库健康状态</h3>
+                            <p class="card-desc">用于确认 FAISS、BM25、元数据和权限过滤是否正常。</p>
+                        </div>
+                        <button class="btn" type="button" onclick="loadKnowledgeHealth()">刷新状态</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="health-grid" id="knowledgeHealth">
+                            <div class="empty-state">正在加载知识库状态...</div>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="card">
+                    <div class="card-header">
+                        <div>
+                            <h3 class="card-title">入库一致性</h3>
+                            <p class="card-desc">核对原文件、向量索引和结构化表格库是否同步。</p>
+                        </div>
+                        <span class="badge badge-info" id="ingestionSummaryBadge">加载中</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="stats-grid" style="margin-bottom: 14px;">
+                            <article class="stat-card" style="padding: 14px; border: 1px solid var(--bg-border); border-radius: 16px; background: var(--bg-soft);">
+                                <p class="stat-label">检查记录</p>
+                                <div class="stat-number" id="ingestionChecked" style="font-size: 24px;">-</div>
+                            </article>
+                            <article class="stat-card" style="padding: 14px; border: 1px solid var(--bg-border); border-radius: 16px; background: var(--bg-soft);">
+                                <p class="stat-label">异常记录</p>
+                                <div class="stat-number" id="ingestionIssues" style="font-size: 24px;">-</div>
+                            </article>
+                            <article class="stat-card" style="padding: 14px; border: 1px solid var(--bg-border); border-radius: 16px; background: var(--bg-soft);">
+                                <p class="stat-label">最近入库</p>
+                                <div class="stat-number" id="ingestionRecent" style="font-size: 24px;">-</div>
+                            </article>
+                            <article class="stat-card" style="padding: 14px; border: 1px solid var(--bg-border); border-radius: 16px; background: var(--bg-soft);">
+                                <p class="stat-label">整体状态</p>
+                                <div class="stat-number" id="ingestionOk" style="font-size: 24px;">-</div>
+                            </article>
+                        </div>
+                        <div class="issue-list" id="ingestionIssueList"></div>
+                        <div class="ingestion-list" id="ingestionRecentList">
+                            <div class="empty-state">正在加载入库记录...</div>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="card">
+                    <div class="card-header">
+                        <div>
+                            <h3 class="card-title">结构化表格库</h3>
+                            <p class="card-desc">查看 Excel/CSV 已入库的文件、Sheet 和结构化行数据。</p>
+                        </div>
+                        <div class="actions">
+                            <button class="btn" type="button" onclick="loadSpreadsheetFiles()">刷新表格库</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="grid-2">
+                            <div class="ingestion-list" id="spreadsheetFileList">
+                                <div class="empty-state">正在加载表格文件...</div>
+                            </div>
+                            <div class="vector-detail" id="spreadsheetRowPreview">
+                                <h4>表格行预览</h4>
+                                <p>点击左侧表格文件查看结构化行数据。</p>
+                            </div>
+                        </div>
+                    </div>
+                </article>
+            </section>
+
+            <section id="logs" class="tab-content">
+                <article class="card">
+                    <div class="card-header">
+                        <div>
+                            <h3 class="card-title">登录日志</h3>
+                            <p class="card-desc">查看最近登录、登出和失败登录记录。</p>
+                        </div>
+                        <button class="btn" type="button" onclick="loadLogs()">刷新日志</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="log-list" id="logContainer">
+                            <div class="empty-state">正在加载日志...</div>
+                        </div>
+                    </div>
+                </article>
+            </section>
+        </main>
+    </div>
+
+    <div class="modal" id="resetPasswordModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>重置密码</h3>
+                <button class="close-btn" type="button" onclick="closeModal('resetPasswordModal')">×</button>
+            </div>
+            <p class="card-desc">为 <strong id="resetUsername"></strong> 设置新的初始密码。</p>
+            <div class="form-group" style="margin-top: 18px;">
+                <label for="resetNewPassword">新密码</label>
+                <input type="password" id="resetNewPassword" placeholder="请输入新密码">
+            </div>
+            <button class="btn btn-primary" type="button" onclick="confirmResetPassword()">确认重置</button>
+        </div>
+    </div>
+
+    <div class="modal" id="knowledgeMetadataModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>编辑知识库权限</h3>
+                <button class="close-btn" type="button" onclick="closeModal('knowledgeMetadataModal')">×</button>
+            </div>
+            <p class="card-desc" id="knowledgeEditFilename">选择新的分类、部门和访问级别。</p>
+            <div class="form-group" style="margin-top: 18px;">
+                <label for="knowledgeEditCategory">分类</label>
+                <input id="knowledgeEditCategory" type="text" placeholder="例如：公共资料 / 财务部">
+            </div>
+            <div class="form-group">
+                <label for="knowledgeEditAccess">访问级别</label>
+                <select id="knowledgeEditAccess" onchange="syncKnowledgeEditDepartment()">
+                    <option value="public">public</option>
+                    <option value="internal">internal</option>
+                    <option value="restricted">restricted</option>
+                    <option value="admin">admin</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="knowledgeEditDepartment">部门</label>
+                <select id="knowledgeEditDepartment"></select>
+            </div>
+            <button class="btn btn-primary" type="button" onclick="submitKnowledgeMetadata()">保存修改</button>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const state = {
+            user: null,
+            token: localStorage.getItem('token') || '',
+            currentTab: 'dashboard',
+            resetUserId: null,
+            departments: [],
+            vectorMap: {
+                points: [],
+                rotationX: -0.48,
+                rotationY: 0.72,
+                zoom: 1,
+                selectedId: null,
+                dragging: false,
+                lastX: 0,
+                lastY: 0,
+                initialized: false,
+            },
+            knowledgeFiles: [],
+            spreadsheetFiles: [],
+            editingKnowledgeHash: null,
+        };
+
+        const pageTitles = {
+            dashboard: '系统概览',
+            beta: '内测数据',
+            tokens: 'Token 检测',
+            users: '账号管理',
+            knowledge: '知识库状态',
+            logs: '登录日志',
+        };
+
+        function authHeaders() {
+            const headers = { 'Content-Type': 'application/json' };
+            if (state.token) headers.Authorization = 'Bearer ' + state.token;
+            return headers;
+        }
+
+        async function apiFetch(url, options = {}) {
+            const response = await fetch(url, {
+                credentials: 'same-origin',
+                ...options,
+                headers: {
+                    ...authHeaders(),
+                    ...(options.headers || {}),
+                },
+            });
+
+            if (response.status === 401) {
+                window.location.href = '/login';
+                throw new Error('未登录');
+            }
+            if (response.status === 403) {
+                showToast('当前账号没有管理员权限');
+                window.location.href = '/chat';
+                throw new Error('权限不足');
+            }
+            return response.json();
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;',
+            }[char]));
+        }
+
+        function shortHash(value) {
+            const text = String(value || '');
+            return text.length > 12 ? `${text.slice(0, 12)}...` : text;
+        }
+
+        function formatDate(value) {
+            if (!value) return '从未登录';
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return value;
+            return date.toLocaleString('zh-CN', { hour12: false });
+        }
+
+        function formatNumber(value) {
+            return Number(value || 0).toLocaleString('zh-CN');
+        }
+
+        function formatDuration(ms) {
+            const value = Number(ms || 0);
+            if (!value) return '-';
+            if (value < 1000) return `${Math.round(value)} ms`;
+            return `${(value / 1000).toFixed(1)} s`;
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            clearTimeout(showToast.timer);
+            showToast.timer = setTimeout(() => toast.classList.remove('show'), 2400);
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        async function waitForAdminJob(jobId, { successMessage = '任务完成', failureMessage = '任务失败', onSuccess = null } = {}) {
+            for (let attempt = 0; attempt < 300; attempt += 1) {
+                const data = await apiFetch(`/api/jobs/${encodeURIComponent(jobId)}`);
+                if (!data.success || !data.job) throw new Error(data.message || '任务查询失败');
+                const job = data.job;
+                if (job.status === 'succeeded') {
+                    showToast(successMessage);
+                    if (onSuccess) onSuccess(job);
+                    return job;
+                }
+                if (job.status === 'failed') {
+                    throw new Error(job.error || job.message || failureMessage);
+                }
+                if (attempt === 0) showToast(job.message || '任务运行中');
+                await sleep(2000);
+            }
+            throw new Error('任务仍在运行，请稍后刷新查看结果');
+        }
+
+        function applyTheme(theme) {
+            const nextTheme = theme === 'dark' ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', nextTheme);
+            localStorage.setItem('theme', nextTheme);
+            const icon = document.querySelector('.theme-icon');
+            if (icon) icon.textContent = nextTheme === 'dark' ? '☀' : '☾';
+        }
+
+        function toggleTheme() {
+            const current = document.documentElement.getAttribute('data-theme') || 'light';
+            applyTheme(current === 'dark' ? 'light' : 'dark');
+        }
+
+        function showTab(tabName, trigger) {
+            state.currentTab = tabName;
+            document.querySelectorAll('.tab-content').forEach((el) => el.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach((el) => el.classList.remove('active'));
+            document.getElementById(tabName)?.classList.add('active');
+            (trigger || document.querySelector(`[data-tab="${tabName}"]`))?.classList.add('active');
+            document.getElementById('pageTitle').textContent = pageTitles[tabName] || '管理后台';
+
+            if (tabName === 'users') loadUsers();
+            if (tabName === 'beta') loadBetaData();
+            if (tabName === 'tokens') loadTokenUsage();
+            if (tabName === 'knowledge') {
+                loadKnowledgeFiles();
+                loadKnowledgeAudit();
+                loadKnowledgeHealth();
+                loadVectorMap();
+                loadSpreadsheetFiles();
+            }
+            if (tabName === 'logs') loadLogs();
+        }
+
+        function scrollToCreateUser() {
+            setTimeout(() => document.getElementById('createUserCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+        }
+
+        async function loadProfile() {
+            const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+            if (storedUser && storedUser.role === 'admin') {
+                state.user = storedUser;
+                renderCurrentUser();
+                return;
+            }
+
+            const data = await apiFetch('/api/auth/profile');
+            if (!data.success || data.user.role !== 'admin') {
+                showToast('当前账号没有管理员权限');
+                window.location.href = '/chat';
+                return;
+            }
+            state.user = data.user;
+            localStorage.setItem('user', JSON.stringify(data.user));
+            renderCurrentUser();
+        }
+
+        function renderCurrentUser() {
+            const user = state.user || {};
+            document.getElementById('currentUser').textContent = `${user.name || user.username || '管理员'} · ${user.department || '未设置部门'}`;
+        }
+
+        async function loadStats() {
+            try {
+                const data = await apiFetch('/api/admin/stats');
+                if (data.success) {
+                    document.getElementById('totalUsers').textContent = data.stats.users || 0;
+                    document.getElementById('activeUsers').textContent = data.stats.active_sessions || 0;
+                    document.getElementById('todayLogins').textContent = data.stats.today_logins || 0;
+                    document.getElementById('totalSessions').textContent = data.stats.total_sessions || 0;
+                }
+            } catch (error) {
+                console.error('加载统计失败:', error);
+            }
+        }
+
+        const feedbackCategoryLabels = {
+            general: '一般反馈',
+            bug: '问题故障',
+            quality: '生成质量',
+            export: '导出 Word',
+            upload: '上传入库',
+            knowledge: '知识库检索',
+            performance: '响应速度',
+        };
+
+        async function loadBetaData() {
+            try {
+                const data = await apiFetch('/api/admin/beta-data?limit=80');
+                if (!data.success) throw new Error(data.message || '加载失败');
+                const summary = data.summary || {};
+                document.getElementById('betaActiveUsers').textContent = summary.active_users || 0;
+                document.getElementById('betaTotalMessages').textContent = summary.total_messages || 0;
+                document.getElementById('betaTodayMessages').textContent = summary.today_messages || 0;
+                document.getElementById('betaFeedbackCount').textContent = summary.total_feedback || 0;
+                const openFeedback = summary.feedback_status?.open || 0;
+                document.getElementById('betaTodayFeedback').textContent = summary.today_feedback || 0;
+                document.getElementById('betaPendingFeedback').textContent = openFeedback;
+                document.getElementById('betaAvgRating').textContent = summary.avg_rating ? `${summary.avg_rating}/5` : '暂无';
+                renderBetaUsers(data.users || []);
+                renderBetaFeedback(data.recent_feedback || []);
+                renderBetaSessions(data.recent_sessions || []);
+            } catch (error) {
+                console.error('内测数据加载失败:', error);
+                document.getElementById('betaUserTable').innerHTML = '<tr><td colspan="8" class="empty-state">内测数据加载失败</td></tr>';
+                document.getElementById('betaFeedbackList').innerHTML = '<div class="empty-state">反馈加载失败</div>';
+                document.getElementById('betaSessionList').innerHTML = '<div class="empty-state">会话加载失败</div>';
+            }
+        }
+
+        function renderBetaUsers(users) {
+            const tbody = document.getElementById('betaUserTable');
+            tbody.innerHTML = users.map((item) => `
+                <tr>
+                    <td>
+                        <strong>${escapeHtml(item.name || item.username || '-')}</strong>
+                        <div class="muted">${escapeHtml(item.username || item.user_id || '')}</div>
+                    </td>
+                    <td>${escapeHtml(item.department || '-')}</td>
+                    <td><span class="badge ${item.role === 'admin' ? 'badge-admin' : 'badge-user'}">${item.role === 'admin' ? '管理员' : '普通用户'}</span></td>
+                    <td>${item.session_count || 0}</td>
+                    <td>${item.message_count || 0}</td>
+                    <td>${item.today_messages || 0}</td>
+                    <td>${item.feedback_count || 0}</td>
+                    <td>${escapeHtml(formatDate(item.last_active || item.last_login || item.created_at))}</td>
+                </tr>
+            `).join('') || '<tr><td colspan="8" class="empty-state">暂无用户数据</td></tr>';
+        }
+
+        function renderBetaFeedback(items) {
+            const container = document.getElementById('betaFeedbackList');
+            container.innerHTML = items.map((item) => {
+                const rating = Number(item.rating || 0);
+                const category = feedbackCategoryLabels[item.category] || item.category || '一般反馈';
+                const context = item.context || {};
+                const statusLabels = {
+                    open: ['待处理', 'badge-warning'],
+                    in_progress: ['处理中', 'badge-info'],
+                    closed: ['已处理', 'badge-ok'],
+                    ignored: ['暂不处理', 'badge-bad'],
+                };
+                const [statusLabel, statusClass] = statusLabels[item.status] || statusLabels.open;
+                const meta = [
+                    item.department || '',
+                    item.session_id ? `会话 ${shortHash(item.session_id)}` : '',
+                    context.mode ? `模式 ${context.mode}` : '',
+                    item.handled_by ? `处理人 ${item.handled_by}` : '',
+                    item.handled_at ? `处理时间 ${formatDate(item.handled_at)}` : '',
+                    item.page_url ? '含页面来源' : '',
+                ].filter(Boolean);
+                return `
+                    <div class="log-item">
+                        <div class="log-main">
+                            <strong>${escapeHtml(item.username || '未知用户')} · ${escapeHtml(category)}</strong>
+                            <span>${escapeHtml(formatDate(item.created_at))}${rating ? ` · 评分 ${rating}/5` : ''}</span>
+                            <span>${escapeHtml(item.content || '')}</span>
+                            ${item.resolution_note ? `<span>处理备注：${escapeHtml(item.resolution_note)}</span>` : ''}
+                            ${meta.length ? `<div class="ingestion-meta">${meta.map((text) => `<span class="badge badge-info">${escapeHtml(text)}</span>`).join('')}</div>` : ''}
+                        </div>
+                        <div class="actions">
+                            <span class="badge ${statusClass}">${statusLabel}</span>
+                            ${item.status !== 'in_progress' ? `<button class="btn btn-small" type="button" onclick="updateFeedbackStatus(${Number(item.id)}, 'in_progress')">处理中</button>` : ''}
+                            ${item.status !== 'closed' ? `<button class="btn btn-small btn-primary" type="button" onclick="updateFeedbackStatus(${Number(item.id)}, 'closed')">已处理</button>` : ''}
+                            ${item.status !== 'ignored' ? `<button class="btn btn-small" type="button" onclick="updateFeedbackStatus(${Number(item.id)}, 'ignored')">暂不处理</button>` : ''}
+                            ${item.status !== 'open' ? `<button class="btn btn-small" type="button" onclick="updateFeedbackStatus(${Number(item.id)}, 'open')">重开</button>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('') || '<div class="empty-state">暂无用户反馈</div>';
+        }
+
+        async function updateFeedbackStatus(feedbackId, status) {
+            const needsNote = status === 'closed' || status === 'ignored';
+            const note = needsNote ? window.prompt('填写处理备注', '') : '';
+            if (needsNote && note === null) return;
+            try {
+                const data = await apiFetch(`/api/admin/beta-feedback/${feedbackId}/status`, {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        status,
+                        resolution_note: note || '',
+                    }),
+                });
+                if (!data.success) {
+                    showToast(data.message || '反馈状态更新失败');
+                    return;
+                }
+                showToast('反馈状态已更新');
+                loadBetaData();
+            } catch (error) {
+                console.error('反馈状态更新失败:', error);
+                showToast('反馈状态更新失败');
+            }
+        }
+
+        function renderBetaSessions(items) {
+            const container = document.getElementById('betaSessionList');
+            container.innerHTML = items.map((item) => `
+                <div class="log-item">
+                    <div class="log-main">
+                        <strong>${escapeHtml(item.title || '未命名会话')}</strong>
+                        <span>${escapeHtml(item.username || item.name || '未知用户')} · ${escapeHtml(item.department || '-')} · ${escapeHtml(formatDate(item.updated_at))}</span>
+                        <span>消息 ${item.message_count || 0}${item.doc_type ? ` · ${escapeHtml(item.doc_type)}` : ''}</span>
+                    </div>
+                    <span class="badge badge-info">${escapeHtml(shortHash(item.session_id || ''))}</span>
+                </div>
+            `).join('') || '<div class="empty-state">暂无会话记录</div>';
+        }
+
+        async function loadTokenUsage() {
+            try {
+                const data = await apiFetch('/api/admin/token-usage?limit=160');
+                if (!data.success) throw new Error(data.message || '加载失败');
+                const summary = data.summary || {};
+                document.getElementById('tokenTotal').textContent = formatNumber(summary.total_tokens);
+                document.getElementById('tokenToday').textContent = formatNumber(summary.today_tokens);
+                document.getElementById('tokenTodayCalls').textContent = formatNumber(summary.today_call_count);
+                document.getElementById('tokenCalls').textContent = formatNumber(summary.call_count);
+                document.getElementById('tokenAvgDuration').textContent = formatDuration(summary.avg_duration_ms);
+                renderTokenUsers(data.by_user || []);
+                renderTokenAgents(data.by_agent || []);
+                renderTokenRecent(data.recent || []);
+            } catch (error) {
+                console.error('Token 数据加载失败:', error);
+                document.getElementById('tokenUserTable').innerHTML = '<tr><td colspan="7" class="empty-state">Token 用户统计加载失败</td></tr>';
+                document.getElementById('tokenAgentTable').innerHTML = '<tr><td colspan="6" class="empty-state">Token Agent 统计加载失败</td></tr>';
+                document.getElementById('tokenRecentTable').innerHTML = '<tr><td colspan="10" class="empty-state">Token 明细加载失败</td></tr>';
+            }
+        }
+
+        function renderTokenUsers(items) {
+            const tbody = document.getElementById('tokenUserTable');
+            tbody.innerHTML = items.map((item) => `
+                <tr>
+                    <td>
+                        <strong>${escapeHtml(item.username || item.user_id || '未知用户')}</strong>
+                        <div class="muted">${escapeHtml(item.user_id || '')}</div>
+                    </td>
+                    <td>${escapeHtml(item.department || '-')}</td>
+                    <td>${formatNumber(item.call_count)}</td>
+                    <td>${formatNumber(item.prompt_tokens)}</td>
+                    <td>${formatNumber(item.completion_tokens)}</td>
+                    <td><strong>${formatNumber(item.total_tokens)}</strong></td>
+                    <td>${escapeHtml(formatDate(item.last_used_at))}</td>
+                </tr>
+            `).join('') || '<tr><td colspan="7" class="empty-state">暂无 Token 使用记录</td></tr>';
+        }
+
+        function renderTokenAgents(items) {
+            const tbody = document.getElementById('tokenAgentTable');
+            tbody.innerHTML = items.map((item) => `
+                <tr>
+                    <td><span class="badge badge-info">${escapeHtml(item.mode || '-')}</span></td>
+                    <td>${escapeHtml(item.agent || '-')}</td>
+                    <td>${escapeHtml(item.model || '-')}</td>
+                    <td>${formatNumber(item.call_count)}</td>
+                    <td><strong>${formatNumber(item.total_tokens)}</strong></td>
+                    <td>${formatDuration(item.avg_duration_ms)}</td>
+                </tr>
+            `).join('') || '<tr><td colspan="6" class="empty-state">暂无 Agent Token 统计</td></tr>';
+        }
+
+        function renderTokenRecent(items) {
+            const tbody = document.getElementById('tokenRecentTable');
+            tbody.innerHTML = items.map((item) => {
+                const ok = item.status === 'success';
+                return `
+                    <tr>
+                        <td>${escapeHtml(formatDate(item.created_at))}</td>
+                        <td>
+                            <strong>${escapeHtml(item.username || item.user_id || '-')}</strong>
+                            <div class="muted">${escapeHtml(item.department || '')}</div>
+                        </td>
+                        <td>${escapeHtml(item.mode || '-')}</td>
+                        <td>${escapeHtml(item.agent || '-')}</td>
+                        <td>${escapeHtml(item.model || '-')}</td>
+                        <td>${formatNumber(item.estimated_prompt_tokens)}</td>
+                        <td>${formatNumber(item.estimated_completion_tokens)}</td>
+                        <td><strong>${formatNumber(item.estimated_total_tokens)}</strong></td>
+                        <td>${formatDuration(item.duration_ms)}</td>
+                        <td><span class="badge ${ok ? 'badge-ok' : 'badge-bad'}">${ok ? '成功' : '失败'}</span></td>
+                    </tr>
+                `;
+            }).join('') || '<tr><td colspan="10" class="empty-state">暂无 Token 明细</td></tr>';
+        }
+
+        async function loadUsers() {
+            const tbody = document.getElementById('userTable');
+            try {
+                const data = await apiFetch('/api/admin/users');
+                if (!data.success) throw new Error(data.message || '加载失败');
+                const users = data.users || [];
+                tbody.innerHTML = users.map((item) => {
+                    const isSelf = item.user_id === state.user?.user_id;
+                    return `
+                        <tr>
+                            <td><strong>${escapeHtml(item.username)}</strong></td>
+                            <td>${escapeHtml(item.name || '-')}</td>
+                            <td>${escapeHtml(item.department || '-')}</td>
+                            <td><span class="badge ${item.role === 'admin' ? 'badge-admin' : 'badge-user'}">${item.role === 'admin' ? '管理员' : '普通用户'}</span></td>
+                            <td><span class="badge ${item.is_active ? 'badge-active' : 'badge-inactive'}">${item.is_active ? '启用' : '禁用'}</span></td>
+                            <td><span class="badge ${item.password_changed ? 'badge-ok' : 'badge-warning'}">${item.password_changed ? '已修改' : '需修改'}</span></td>
+                            <td>${escapeHtml(formatDate(item.last_login))}</td>
+                            <td>
+                                <div class="actions">
+                                    ${isSelf ? '<span class="muted">当前用户</span>' : `
+                                        <button class="btn btn-small" type="button" onclick="toggleUserStatus('${item.user_id}', ${item.is_active ? 'false' : 'true'})">${item.is_active ? '禁用' : '启用'}</button>
+                                        <button class="btn btn-small btn-primary" type="button" onclick="showResetPassword('${item.user_id}', '${escapeHtml(item.username)}')">重置密码</button>
+                                    `}
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('') || '<tr><td colspan="8" class="empty-state">暂无用户</td></tr>';
+            } catch (error) {
+                tbody.innerHTML = '<tr><td colspan="8" class="empty-state">用户加载失败</td></tr>';
+                console.error('加载用户失败:', error);
+            }
+        }
+
+        async function loadDepartments() {
+            const select = document.getElementById('newDepartment');
+            try {
+                const data = await apiFetch('/api/admin/departments');
+                if (!data.success) throw new Error(data.message || '加载失败');
+                state.departments = data.departments || [];
+                select.innerHTML = [
+                    '<option value="">请选择部门（管理员可留空）</option>',
+                    ...state.departments.map((dept) => `<option value="${escapeHtml(dept.id)}">${escapeHtml(dept.name)}</option>`)
+                ].join('');
+            } catch (error) {
+                console.error('加载部门失败:', error);
+                select.innerHTML = '<option value="">部门加载失败，请刷新页面</option>';
+                showToast('部门列表加载失败');
+            }
+        }
+
+        async function createUser(event) {
+            event.preventDefault();
+            const payload = {
+                username: document.getElementById('newUsername').value.trim(),
+                password: document.getElementById('newPassword').value,
+                name: document.getElementById('newName').value.trim(),
+                department: document.getElementById('newDepartment').value,
+                role: document.getElementById('newRole').value,
+            };
+
+            if (!payload.username || !payload.password) {
+                showToast('请填写用户名和初始密码');
+                return;
+            }
+            if (payload.password.length < 6) {
+                showToast('初始密码至少 6 位');
+                return;
+            }
+            if (payload.role === 'user' && !payload.department) {
+                showToast('普通用户必须选择所属部门');
+                return;
+            }
+
+            try {
+                const data = await apiFetch('/api/admin/users', {
+                    method: 'POST',
+                    body: JSON.stringify(payload),
+                });
+                if (data.success) {
+                    showToast('账号创建成功');
+                    document.getElementById('createUserForm').reset();
+                    await Promise.all([loadUsers(), loadStats()]);
+                } else {
+                    showToast(data.message || '账号创建失败');
+                }
+            } catch (error) {
+                console.error('创建用户失败:', error);
+                showToast('账号创建失败');
+            }
+        }
+
+        async function toggleUserStatus(userId, isActive) {
+            try {
+                const data = await apiFetch(`/api/admin/users/${userId}/status`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ is_active: isActive }),
+                });
+                if (data.success) {
+                    showToast('账号状态已更新');
+                    loadUsers();
+                } else {
+                    showToast(data.message || '状态更新失败');
+                }
+            } catch (error) {
+                console.error('状态更新失败:', error);
+                showToast('状态更新失败');
+            }
+        }
+
+        function showResetPassword(userId, username) {
+            state.resetUserId = userId;
+            document.getElementById('resetUsername').textContent = username;
+            document.getElementById('resetNewPassword').value = '';
+            document.getElementById('resetPasswordModal').classList.add('show');
+        }
+
+        async function confirmResetPassword() {
+            const newPassword = document.getElementById('resetNewPassword').value;
+            if (!newPassword || newPassword.length < 6) {
+                showToast('新密码至少 6 位');
+                return;
+            }
+
+            try {
+                const data = await apiFetch(`/api/admin/users/${state.resetUserId}/reset-password`, {
+                    method: 'POST',
+                    body: JSON.stringify({ new_password: newPassword }),
+                });
+                if (data.success) {
+                    showToast('密码重置成功');
+                    closeModal('resetPasswordModal');
+                    loadUsers();
+                } else {
+                    showToast(data.message || '密码重置失败');
+                }
+            } catch (error) {
+                console.error('密码重置失败:', error);
+                showToast('密码重置失败');
+            }
+        }
+
+        async function loadKnowledgeFiles() {
+            const container = document.getElementById('knowledgeFileList');
+            if (!container) return;
+            const params = new URLSearchParams();
+            const q = document.getElementById('knowledgeFileSearch')?.value.trim();
+            const status = document.getElementById('knowledgeFileStatus')?.value;
+            const sourceType = document.getElementById('knowledgeFileType')?.value;
+            const accessLevel = document.getElementById('knowledgeFileAccess')?.value;
+            if (q) params.set('q', q);
+            if (status) params.set('status', status);
+            if (sourceType) params.set('source_type', sourceType);
+            if (accessLevel) params.set('access_level', accessLevel);
+            params.set('limit', '300');
+
+            container.innerHTML = '<div class="empty-state">正在加载知识库文件...</div>';
+            try {
+                const data = await apiFetch(`/api/admin/knowledge-files?${params.toString()}`);
+                if (!data.success) throw new Error(data.message || '知识库文件加载失败');
+                state.knowledgeFiles = data.files || [];
+                container.innerHTML = state.knowledgeFiles.length
+                    ? state.knowledgeFiles.map(renderKnowledgeFile).join('')
+                    : '<div class="empty-state">暂无匹配的知识库文件</div>';
+            } catch (error) {
+                console.error('知识库文件加载失败:', error);
+                container.innerHTML = '<div class="empty-state">知识库文件加载失败</div>';
+            }
+        }
+
+        function renderKnowledgeFile(item) {
+            const status = item.status || 'unknown';
+            const statusClass = status === 'completed'
+                ? 'badge-ok'
+                : status === 'archived'
+                    ? 'badge-info'
+                    : status === 'failed'
+                        ? 'badge-bad'
+                        : 'badge-warning';
+            const sourceType = item.source_type === 'spreadsheet' ? '报表' : '文档';
+            const fileState = item.file_exists
+                ? '原文件存在'
+                : item.archived_exists
+                    ? '已归档'
+                    : '原文件缺失';
+            const hash = item.content_hash || '';
+            const managed = item.managed !== false && !String(hash).startsWith('legacy:');
+            const canViewRows = item.source_type === 'spreadsheet' && Number(item.spreadsheet_rows_found || 0) > 0;
+            const validation = item.spreadsheet_validation || {};
+            const validationText = item.source_type === 'spreadsheet'
+                ? renderSpreadsheetValidation(validation)
+                : '';
+            return `
+                <div class="ingestion-item">
+                    <div class="ingestion-main">
+                        <strong>${escapeHtml(item.filename || '未知文件')}</strong>
+                        <span>${escapeHtml(item.source_path || item.archived_path || '')}</span>
+                        <div class="ingestion-meta">
+                            <span class="badge badge-info">${escapeHtml(item.category || '未分类')}</span>
+                            <span class="badge badge-info">${escapeHtml(sourceType)}</span>
+                            <span class="badge ${item.access_level === 'public' ? 'badge-ok' : 'badge-warning'}">${escapeHtml(item.access_level || '-')}</span>
+                            ${item.department ? `<span class="badge badge-info">${escapeHtml(item.department)}</span>` : ''}
+                            <span class="badge badge-info">向量 ${item.vector_chunk_count ?? 0}/${item.chunk_count ?? 0}</span>
+                            ${item.source_type === 'spreadsheet' ? `<span class="badge badge-info">表格 ${item.spreadsheet_rows_found ?? 0}/${item.spreadsheet_row_count ?? 0}</span>` : ''}
+                            <span class="badge ${item.file_exists || item.archived_exists ? 'badge-ok' : 'badge-bad'}">${escapeHtml(fileState)}</span>
+                            <span class="badge badge-info">${escapeHtml(shortHash(hash))}</span>
+                        </div>
+                        ${validationText}
+                        ${item.error_message ? `<span style="color: var(--danger); font-size: 12px;">${escapeHtml(item.error_message)}</span>` : ''}
+                    </div>
+                    <div class="actions">
+                        <span class="badge ${statusClass}">${escapeHtml(status)}</span>
+                        <button class="btn btn-small" type="button" onclick="focusKnowledgeVector('${escapeHtml(hash)}')">向量</button>
+                        ${canViewRows ? `<button class="btn btn-small" type="button" onclick="viewKnowledgeSpreadsheetRows('${escapeHtml(hash)}')">表格</button>` : ''}
+                        ${managed ? `
+                            <button class="btn btn-small" type="button" onclick="openKnowledgeMetadata('${escapeHtml(hash)}')">权限</button>
+                            <button class="btn btn-small" type="button" onclick="reindexKnowledgeFile('${escapeHtml(hash)}')">重建</button>
+                            <button class="btn btn-small btn-danger" type="button" onclick="deleteKnowledgeFile('${escapeHtml(hash)}')">删除</button>
+                        ` : '<span class="badge badge-warning">重新上传后可管理</span>'}
+                    </div>
+                </div>
+            `;
+        }
+
+        async function loadKnowledgeAudit() {
+            const container = document.getElementById('knowledgeAuditList');
+            if (!container) return;
+            try {
+                const data = await apiFetch('/api/admin/knowledge-audit?limit=60');
+                if (!data.success) throw new Error(data.message || '审计加载失败');
+                const rows = data.audit || [];
+                container.innerHTML = rows.length
+                    ? rows.map(renderKnowledgeAudit).join('')
+                    : '<div class="empty-state">暂无知识库管理操作记录</div>';
+            } catch (error) {
+                console.error('知识库审计加载失败:', error);
+                container.innerHTML = '<div class="empty-state">知识库审计加载失败</div>';
+            }
+        }
+
+        function renderKnowledgeAudit(item) {
+            const ok = item.status === 'success';
+            const actionText = {
+                upload: '上传',
+                delete: '删除',
+                reindex: '重建',
+                metadata: '权限编辑',
+            }[item.action] || item.action || '操作';
+            const meta = [
+                item.actor_name || item.actor_id || '未知管理员',
+                item.created_at ? formatDate(item.created_at) : '',
+                item.backup_path ? `备份 ${item.backup_path}` : '',
+            ].filter(Boolean);
+            return `
+                <div class="ingestion-item">
+                    <div class="ingestion-main">
+                        <strong>${escapeHtml(actionText)} · ${escapeHtml(item.filename || shortHash(item.content_hash))}</strong>
+                        <span>${escapeHtml(item.message || '')}</span>
+                        <div class="ingestion-meta">
+                            ${meta.map((text) => `<span class="badge badge-info">${escapeHtml(text)}</span>`).join('')}
+                        </div>
+                    </div>
+                    <div class="actions">
+                        <span class="badge ${ok ? 'badge-ok' : item.status === 'duplicate' ? 'badge-warning' : 'badge-bad'}">${item.status === 'duplicate' ? '重复拦截' : ok ? '成功' : '失败'}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderSpreadsheetValidation(validation) {
+            if (!validation || !Object.keys(validation).length) return '';
+            const warnings = validation.warnings || [];
+            const cls = validation.ok ? 'badge-ok' : 'badge-warning';
+            const labels = [
+                `解析行 ${validation.row_count ?? 0}`,
+                `Sheet ${validation.sheet_count ?? 0}`,
+                `空值 ${Math.round(Number(validation.empty_ratio || 0) * 100)}%`,
+                validation.duplicate_rows ? `重复 ${validation.duplicate_rows}` : '',
+            ].filter(Boolean);
+            return `
+                <div class="ingestion-meta" style="margin-top:6px;">
+                    <span class="badge ${cls}">${validation.ok ? '表格校验正常' : '需复核'}</span>
+                    ${labels.map((text) => `<span class="badge badge-info">${escapeHtml(text)}</span>`).join('')}
+                    ${warnings.slice(0, 2).map((text) => `<span class="badge badge-warning">${escapeHtml(text)}</span>`).join('')}
+                </div>
+            `;
+        }
+
+        function findKnowledgeFile(contentHash) {
+            return state.knowledgeFiles.find((item) => item.content_hash === contentHash);
+        }
+
+        function focusKnowledgeVector(contentHash) {
+            state.vectorMap.selectedId = null;
+            loadVectorMap();
+            document.getElementById('vectorMapCanvas')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            showToast(`已刷新向量地图：${shortHash(contentHash)}`);
+        }
+
+        function viewKnowledgeSpreadsheetRows(contentHash) {
+            loadSpreadsheetRows(contentHash);
+            document.getElementById('spreadsheetRowPreview')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        function openKnowledgeMetadata(contentHash) {
+            const item = findKnowledgeFile(contentHash);
+            if (!item) {
+                showToast('未找到该文件');
+                return;
+            }
+            state.editingKnowledgeHash = contentHash;
+            document.getElementById('knowledgeEditFilename').textContent = item.filename || contentHash;
+            document.getElementById('knowledgeEditCategory').value = item.category || '';
+            document.getElementById('knowledgeEditAccess').value = item.access_level || 'public';
+            const deptSelect = document.getElementById('knowledgeEditDepartment');
+            deptSelect.innerHTML = [
+                '<option value="">无部门</option>',
+                ...state.departments.map((dept) => `<option value="${escapeHtml(dept.id)}">${escapeHtml(dept.name)}</option>`)
+            ].join('');
+            deptSelect.value = item.department || '';
+            syncKnowledgeEditDepartment();
+            document.getElementById('knowledgeMetadataModal')?.classList.add('show');
+        }
+
+        function syncKnowledgeEditDepartment() {
+            const access = document.getElementById('knowledgeEditAccess')?.value;
+            const dept = document.getElementById('knowledgeEditDepartment');
+            if (!dept) return;
+            dept.disabled = access !== 'restricted';
+            if (access !== 'restricted') dept.value = '';
+        }
+
+        async function submitKnowledgeMetadata() {
+            const contentHash = state.editingKnowledgeHash;
+            if (!contentHash) return;
+            const payload = {
+                category: document.getElementById('knowledgeEditCategory').value.trim(),
+                access_level: document.getElementById('knowledgeEditAccess').value,
+                department: document.getElementById('knowledgeEditDepartment').value,
+            };
+            try {
+                const data = await apiFetch(`/api/admin/knowledge-files/${encodeURIComponent(contentHash)}/metadata`, {
+                    method: 'PUT',
+                    body: JSON.stringify(payload),
+                });
+                if (!data.success) {
+                    showToast(data.message || '权限更新失败');
+                    return;
+                }
+                closeModal('knowledgeMetadataModal');
+                showToast('权限已更新');
+                refreshKnowledgeAdminViews();
+            } catch (error) {
+                console.error('权限更新失败:', error);
+                showToast('权限更新失败');
+            }
+        }
+
+        async function reindexKnowledgeFile(contentHash) {
+            const item = findKnowledgeFile(contentHash);
+            const label = item?.filename || shortHash(contentHash);
+            const detail = `将重新解析 ${label}，替换现有 ${item?.vector_chunk_count ?? 0} 个向量片段和 ${item?.spreadsheet_rows_found ?? 0} 行表格数据。`;
+            if (!window.confirm(`${detail}\n\n确认继续？`)) return;
+            try {
+                const data = await apiFetch(`/api/admin/knowledge-files/${encodeURIComponent(contentHash)}/reindex`, {
+                    method: 'POST',
+                    body: JSON.stringify({}),
+                });
+                if (!data.success) {
+                    showToast(data.message || '重建失败');
+                    return;
+                }
+                if (data.job_id) {
+                    showToast('重建任务已提交');
+                    await waitForAdminJob(data.job_id, {
+                        successMessage: '重建完成',
+                        failureMessage: '重建失败',
+                        onSuccess: refreshKnowledgeAdminViews,
+                    });
+                    return;
+                }
+                showToast('重建完成');
+                refreshKnowledgeAdminViews();
+            } catch (error) {
+                console.error('重建失败:', error);
+                showToast(error.message || '重建失败');
+            }
+        }
+
+        async function deleteKnowledgeFile(contentHash) {
+            const item = findKnowledgeFile(contentHash);
+            const label = item?.filename || shortHash(contentHash);
+            const detail = `将从检索中移除 ${label}，删除 ${item?.vector_chunk_count ?? 0} 个向量片段和 ${item?.spreadsheet_rows_found ?? 0} 行表格数据，原文件会移入归档目录。`;
+            if (!window.confirm(`${detail}\n\n确认软删除？`)) return;
+            const reason = window.prompt('请填写删除原因', '');
+            if (reason === null) return;
+            if (!reason.trim()) {
+                showToast('删除原因不能为空');
+                return;
+            }
+            try {
+                const data = await apiFetch(`/api/admin/knowledge-files/${encodeURIComponent(contentHash)}`, {
+                    method: 'DELETE',
+                    body: JSON.stringify({
+                        confirm: true,
+                        reason: reason.trim(),
+                    }),
+                });
+                if (!data.success) {
+                    showToast(data.message || '删除失败');
+                    return;
+                }
+                showToast('已软删除');
+                refreshKnowledgeAdminViews();
+            } catch (error) {
+                console.error('删除失败:', error);
+                showToast('删除失败');
+            }
+        }
+
+        function refreshKnowledgeAdminViews() {
+            loadKnowledgeFiles();
+            loadKnowledgeAudit();
+            loadKnowledgeHealth();
+            loadVectorMap();
+            loadSpreadsheetFiles();
+        }
+
+        async function loadKnowledgeHealth() {
+            const targets = [document.getElementById('knowledgeHealth'), document.getElementById('dashboardHealth')];
+            try {
+                const data = await apiFetch('/api/admin/knowledge-health');
+                if (!data.success) throw new Error('知识库状态加载失败');
+                const html = renderHealth(data.health || {});
+                targets.forEach((target) => {
+                    if (target) target.innerHTML = html;
+                });
+                renderIngestionConsistency(data.ingestion_consistency || {});
+            } catch (error) {
+                targets.forEach((target) => {
+                    if (target) target.innerHTML = '<div class="empty-state">知识库状态加载失败</div>';
+                });
+                renderIngestionConsistency(null);
+                console.error('知识库状态加载失败:', error);
+            }
+        }
+
+        function renderHealth(health) {
+            const items = [
+                ['模型加载', health.model_loaded, 'Embedding 模型是否可用'],
+                ['FAISS 索引', health.faiss_loaded, `文本块：${health.text_count ?? 0}`],
+                ['BM25 索引', health.bm25_loaded, '关键词召回组件状态'],
+                ['元数据', Number(health.metadata_count || 0) === Number(health.text_count || 0), `元数据：${health.metadata_count ?? 0}`],
+                ['权限过滤', true, `当前可见：${health.visible_count ?? 0}`],
+                ['向量维度', true, `维度：${health.embedding_dim ?? '-'}`],
+            ];
+            const mtime = health.faiss_mtime ? formatDate(health.faiss_mtime * 1000) : '未知';
+            items.push(['索引时间', Boolean(health.faiss_mtime), mtime]);
+            items.push(['索引路径', Boolean(health.index_path), health.index_path || '未配置']);
+
+            return items.map(([title, ok, desc]) => `
+                <div class="health-item">
+                    <div class="health-main">
+                        <strong>${escapeHtml(title)}</strong>
+                        <span>${escapeHtml(desc)}</span>
+                    </div>
+                    <span class="badge ${ok ? 'badge-ok' : 'badge-bad'}">${ok ? '正常' : '异常'}</span>
+                </div>
+            `).join('');
+        }
+
+        function renderIngestionConsistency(report) {
+            const badge = document.getElementById('ingestionSummaryBadge');
+            const checked = document.getElementById('ingestionChecked');
+            const issues = document.getElementById('ingestionIssues');
+            const recent = document.getElementById('ingestionRecent');
+            const ok = document.getElementById('ingestionOk');
+            const issueList = document.getElementById('ingestionIssueList');
+            const recentList = document.getElementById('ingestionRecentList');
+
+            if (!badge || !checked || !issues || !recent || !ok || !issueList || !recentList) return;
+
+            if (!report) {
+                badge.className = 'badge badge-bad';
+                badge.textContent = '加载失败';
+                checked.textContent = '-';
+                issues.textContent = '-';
+                recent.textContent = '-';
+                ok.textContent = '异常';
+                issueList.innerHTML = '';
+                recentList.innerHTML = '<div class="empty-state">入库一致性加载失败</div>';
+                return;
+            }
+
+            const isOk = Boolean(report.ok);
+            badge.className = `badge ${isOk ? 'badge-ok' : 'badge-bad'}`;
+            badge.textContent = isOk ? '一致' : '有异常';
+            checked.textContent = report.checked_count ?? 0;
+            issues.textContent = report.issue_count ?? 0;
+            recent.textContent = (report.recent || []).length;
+            ok.textContent = isOk ? '正常' : '异常';
+
+            const issueRows = report.issues || [];
+            issueList.innerHTML = issueRows.length
+                ? issueRows.slice(0, 6).map((item) => `
+                    <div class="issue-item">
+                        <strong>${escapeHtml(item.filename || item.content_hash || '未知文件')}</strong>
+                        <span>${escapeHtml((item.issues || []).join('；'))}</span>
+                    </div>
+                `).join('')
+                : '';
+
+            const rows = report.recent || [];
+            recentList.innerHTML = rows.length
+                ? rows.slice(0, 12).map(renderIngestionRecord).join('')
+                : '<div class="empty-state">暂无入库记录</div>';
+        }
+
+        function renderIngestionRecord(item) {
+            const status = item.status || 'unknown';
+            const statusClass = status === 'completed'
+                ? 'badge-ok'
+                : status === 'failed'
+                    ? 'badge-bad'
+                    : 'badge-warning';
+            const sourceType = item.source_type === 'spreadsheet' ? '报表' : '文档';
+            const issueText = (item.issues || []).length
+                ? `<span class="badge badge-bad">${escapeHtml(item.issues.join('；'))}</span>`
+                : '<span class="badge badge-ok">一致</span>';
+            const meta = [
+                item.category || '',
+                sourceType,
+                `片段 ${item.vector_chunk_count ?? 0}/${item.chunk_count ?? 0}`,
+                item.source_type === 'spreadsheet' ? `表格行 ${item.spreadsheet_rows_found ?? 0}/${item.spreadsheet_row_count ?? 0}` : '',
+                item.file_exists ? '原文件存在' : '原文件缺失',
+                item.updated_at ? formatDate(item.updated_at) : '',
+            ].filter(Boolean);
+
+            return `
+                <div class="ingestion-item">
+                    <div class="ingestion-main">
+                        <strong>${escapeHtml(item.filename || '未知文件')}</strong>
+                        <span>${escapeHtml(item.source_path || '')}</span>
+                        <div class="ingestion-meta">
+                            ${meta.map((text) => `<span class="badge badge-info">${escapeHtml(text)}</span>`).join('')}
+                        </div>
+                    </div>
+                    <div class="actions">
+                        <span class="badge ${statusClass}">${escapeHtml(status)}</span>
+                        ${issueText}
+                    </div>
+                </div>
+            `;
+        }
+
+        async function loadSpreadsheetFiles() {
+            const container = document.getElementById('spreadsheetFileList');
+            if (!container) return;
+            try {
+                const data = await apiFetch('/api/admin/spreadsheets?limit=100');
+                if (!data.success) throw new Error(data.message || '表格库加载失败');
+                const files = data.files || [];
+                state.spreadsheetFiles = files;
+                container.innerHTML = files.length
+                    ? files.map(renderSpreadsheetFile).join('')
+                    : '<div class="empty-state">暂无结构化表格文件</div>';
+            } catch (error) {
+                console.error('表格库加载失败:', error);
+                container.innerHTML = '<div class="empty-state">表格库加载失败</div>';
+            }
+        }
+
+        function renderSpreadsheetFile(item) {
+            const validationText = renderSpreadsheetValidation(item.validation || {});
+            const hash = item.content_hash || '';
+            return `
+                <div class="ingestion-item">
+                    <div class="ingestion-main">
+                        <strong>${escapeHtml(item.filename || '未知表格')}</strong>
+                        <span>${escapeHtml(item.source_path || '')}</span>
+                        <div class="ingestion-meta">
+                            <span class="badge badge-info">${escapeHtml(item.category || '未分类')}</span>
+                            <span class="badge badge-info">Sheet ${item.sheet_count || 0}</span>
+                            <span class="badge badge-info">行 ${item.row_count || 0}</span>
+                            <span class="badge ${item.access_level === 'public' ? 'badge-ok' : 'badge-warning'}">${escapeHtml(item.access_level || '-')}</span>
+                        </div>
+                        ${validationText}
+                    </div>
+                    <div class="actions">
+                        <button class="btn btn-small" type="button" onclick="loadSpreadsheetRows('${escapeHtml(hash)}')">查看</button>
+                        <button class="btn btn-small btn-primary" type="button" onclick="exportSpreadsheetFile('${escapeHtml(hash)}')">导出</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function exportSpreadsheetFile(contentHash) {
+            try {
+                const response = await fetch(`/api/admin/spreadsheets/${encodeURIComponent(contentHash)}/export`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const file = state.spreadsheetFiles.find((item) => item.content_hash === contentHash) || {};
+                const stem = (file.filename || '结构化表格').replace(/[\\/:*?"<>|\r\n\t]+/g, '').slice(0, 40) || '结构化表格';
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${stem}_结构化导出.xlsx`;
+                a.click();
+                URL.revokeObjectURL(url);
+                showToast('Excel 导出成功');
+            } catch (error) {
+                console.error('表格导出失败:', error);
+                showToast('表格导出失败');
+            }
+        }
+
+        async function loadSpreadsheetRows(contentHash) {
+            const preview = document.getElementById('spreadsheetRowPreview');
+            if (!preview) return;
+            preview.innerHTML = '<h4>表格行预览</h4><p>正在加载结构化行...</p>';
+            try {
+                const data = await apiFetch(`/api/admin/spreadsheets/${encodeURIComponent(contentHash)}/rows`);
+                if (!data.success) throw new Error(data.message || '表格行加载失败');
+                const rows = data.rows || [];
+                preview.innerHTML = `
+                    <h4>表格行预览</h4>
+                    <p>共 ${data.total || rows.length} 行，最多显示前 20 行。</p>
+                    <div class="actions" style="margin: 10px 0 12px;">
+                        <button class="btn btn-small btn-primary" type="button" onclick="exportSpreadsheetFile('${escapeHtml(contentHash)}')">导出全部行</button>
+                    </div>
+                    <div class="issue-list">
+                        ${rows.slice(0, 20).map(renderSpreadsheetRow).join('') || '<div class="empty-state">暂无行数据</div>'}
+                    </div>
+                `;
+            } catch (error) {
+                console.error('表格行加载失败:', error);
+                preview.innerHTML = '<h4>表格行预览</h4><p>表格行加载失败。</p>';
+            }
+        }
+
+        function renderSpreadsheetRow(row) {
+            const values = row.values || {};
+            const cells = Object.entries(values).slice(0, 8).map(([key, value]) =>
+                `${escapeHtml(key)}：${escapeHtml(value)}`
+            ).join('；');
+            return `
+                <div class="issue-item" style="color: var(--text-primary); background: var(--bg-soft);">
+                    <strong>${escapeHtml(row.filename || '')} · ${escapeHtml(row.sheet_name || '')} · 行 ${row.row_number ?? '-'}</strong>
+                    <span>${cells || escapeHtml(row.row_text || '')}</span>
+                </div>
+            `;
+        }
+
+        async function loadVectorMap() {
+            const summary = document.getElementById('vectorMapSummary');
+            const detail = document.getElementById('vectorPointDetail');
+            if (summary) summary.innerHTML = '<h4>向量概览</h4><p>正在生成三维坐标...</p>';
+            try {
+                initVectorMapCanvas();
+                const data = await apiFetch('/api/admin/vector-map?limit=1500');
+                if (!data.success) throw new Error(data.message || '向量地图加载失败');
+                const map = data.map || {};
+                state.vectorMap.points = map.points || [];
+                state.vectorMap.selectedId = null;
+                renderVectorMapSummary(map);
+                if (detail) {
+                    detail.innerHTML = '<h4>选中点</h4><p>点击坐标系中的点查看文件、分类、片段和报表行号。</p>';
+                }
+                drawVectorMap();
+            } catch (error) {
+                console.error('向量地图加载失败:', error);
+                if (summary) summary.innerHTML = '<h4>向量概览</h4><p>向量地图加载失败。</p>';
+            }
+        }
+
+        function renderVectorMapSummary(map) {
+            const summary = document.getElementById('vectorMapSummary');
+            if (!summary) return;
+            if (!map.ok) {
+                summary.innerHTML = `<h4>向量概览</h4><p>${escapeHtml(map.message || '暂无向量数据')}</p>`;
+                return;
+            }
+            const explained = (map.explained_variance || [])
+                .slice(0, 3)
+                .map((v) => `${Math.round(Number(v || 0) * 100)}%`)
+                .join(' / ');
+            summary.innerHTML = `
+                <h4>向量概览</h4>
+                <p>坐标点：${map.point_count || 0}，文件数：${map.file_count || 0}</p>
+                <p>采样：${map.sampled || 0}/${map.total_vectors || 0}</p>
+                <p>主成分解释度：${escapeHtml(explained || '-')}</p>
+            `;
+        }
+
+        function initVectorMapCanvas() {
+            const canvas = document.getElementById('vectorMapCanvas');
+            if (!canvas || state.vectorMap.initialized) return;
+            state.vectorMap.initialized = true;
+
+            canvas.addEventListener('pointerdown', (event) => {
+                state.vectorMap.dragging = true;
+                state.vectorMap.lastX = event.clientX;
+                state.vectorMap.lastY = event.clientY;
+                canvas.setPointerCapture(event.pointerId);
+            });
+            canvas.addEventListener('pointermove', (event) => {
+                if (!state.vectorMap.dragging) return;
+                const dx = event.clientX - state.vectorMap.lastX;
+                const dy = event.clientY - state.vectorMap.lastY;
+                state.vectorMap.lastX = event.clientX;
+                state.vectorMap.lastY = event.clientY;
+                state.vectorMap.rotationY += dx * 0.008;
+                state.vectorMap.rotationX += dy * 0.008;
+                drawVectorMap();
+            });
+            canvas.addEventListener('pointerup', (event) => {
+                state.vectorMap.dragging = false;
+                try { canvas.releasePointerCapture(event.pointerId); } catch (_) {}
+            });
+            canvas.addEventListener('wheel', (event) => {
+                event.preventDefault();
+                const factor = event.deltaY > 0 ? 0.92 : 1.08;
+                state.vectorMap.zoom = Math.min(2.6, Math.max(0.45, state.vectorMap.zoom * factor));
+                drawVectorMap();
+            }, { passive: false });
+            canvas.addEventListener('click', (event) => {
+                const rect = canvas.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+                const nearest = findNearestVectorPoint(x, y);
+                if (nearest) {
+                    state.vectorMap.selectedId = nearest.id;
+                    renderVectorPointDetail(nearest);
+                    drawVectorMap();
+                }
+            });
+            window.addEventListener('resize', drawVectorMap);
+        }
+
+        function drawVectorMap() {
+            const canvas = document.getElementById('vectorMapCanvas');
+            if (!canvas) return;
+            const rect = canvas.getBoundingClientRect();
+            const width = Math.max(320, Math.floor(rect.width));
+            const height = Math.max(320, Math.floor(rect.height || 480));
+            if (canvas.width !== width || canvas.height !== height) {
+                canvas.width = width;
+                canvas.height = height;
+            }
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg-soft') || '#f3f8ff';
+            ctx.fillRect(0, 0, width, height);
+
+            const points = state.vectorMap.points || [];
+            drawVectorAxes(ctx, width, height);
+            if (!points.length) {
+                ctx.fillStyle = '#6b7f99';
+                ctx.font = '14px sans-serif';
+                ctx.fillText('暂无向量点', 24, 34);
+                return;
+            }
+
+            const projected = points.map((point) => ({
+                ...point,
+                _projected: projectVectorPoint(point, width, height),
+            })).sort((a, b) => a._projected.depth - b._projected.depth);
+            state.vectorMap.projected = projected;
+
+            projected.forEach((point) => {
+                const p = point._projected;
+                const selected = point.id === state.vectorMap.selectedId;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, selected ? 6.5 : Math.max(2.5, 4.8 + p.depth * 1.2), 0, Math.PI * 2);
+                ctx.fillStyle = selected ? '#d97706' : point.source_type === 'spreadsheet' ? '#2f9e69' : '#3f8ced';
+                ctx.globalAlpha = selected ? 1 : Math.max(0.42, Math.min(0.92, 0.62 + p.depth * 0.18));
+                ctx.fill();
+                ctx.globalAlpha = 1;
+                if (selected) {
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+            });
+        }
+
+        function drawVectorAxes(ctx, width, height) {
+            const axes = [
+                { label: 'X', color: '#e15759', from: [-1.2, 0, 0], to: [1.2, 0, 0] },
+                { label: 'Y', color: '#2f9e69', from: [0, -1.2, 0], to: [0, 1.2, 0] },
+                { label: 'Z', color: '#3f8ced', from: [0, 0, -1.2], to: [0, 0, 1.2] },
+            ];
+            axes.forEach((axis) => {
+                const start = projectVectorPoint({ x: axis.from[0], y: axis.from[1], z: axis.from[2] }, width, height);
+                const end = projectVectorPoint({ x: axis.to[0], y: axis.to[1], z: axis.to[2] }, width, height);
+                ctx.strokeStyle = axis.color;
+                ctx.lineWidth = 1.4;
+                ctx.beginPath();
+                ctx.moveTo(start.x, start.y);
+                ctx.lineTo(end.x, end.y);
+                ctx.stroke();
+                ctx.fillStyle = axis.color;
+                ctx.font = '12px sans-serif';
+                ctx.fillText(axis.label, end.x + 5, end.y - 5);
+            });
+        }
+
+        function projectVectorPoint(point, width, height) {
+            const rx = state.vectorMap.rotationX;
+            const ry = state.vectorMap.rotationY;
+            let x = Number(point.x || 0);
+            let y = Number(point.y || 0);
+            let z = Number(point.z || 0);
+
+            const cosY = Math.cos(ry);
+            const sinY = Math.sin(ry);
+            const x1 = x * cosY - z * sinY;
+            const z1 = x * sinY + z * cosY;
+            x = x1;
+            z = z1;
+
+            const cosX = Math.cos(rx);
+            const sinX = Math.sin(rx);
+            const y1 = y * cosX - z * sinX;
+            const z2 = y * sinX + z * cosX;
+            y = y1;
+            z = z2;
+
+            const scale = Math.min(width, height) * 0.34 * state.vectorMap.zoom;
+            const perspective = 1.7 / (2.35 - z * 0.42);
+            return {
+                x: width / 2 + x * scale * perspective,
+                y: height / 2 - y * scale * perspective,
+                depth: z,
+            };
+        }
+
+        function findNearestVectorPoint(x, y) {
+            const projected = state.vectorMap.projected || [];
+            let best = null;
+            let bestDistance = Infinity;
+            projected.forEach((point) => {
+                const p = point._projected;
+                const distance = Math.hypot(p.x - x, p.y - y);
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    best = point;
+                }
+            });
+            return bestDistance <= 14 ? best : null;
+        }
+
+        function renderVectorPointDetail(point) {
+            const detail = document.getElementById('vectorPointDetail');
+            if (!detail) return;
+            const chunk = point.chunk_index >= 0 && point.total_chunks >= 0
+                ? `片段：${Number(point.chunk_index) + 1}/${point.total_chunks}`
+                : '';
+            const row = point.source_type === 'spreadsheet' && point.row_start
+                ? `Sheet：${point.sheet_name || '-'}，行：${point.row_start}${point.row_end && point.row_end !== point.row_start ? '-' + point.row_end : ''}`
+                : '';
+            detail.innerHTML = `
+                <h4>选中点</h4>
+                <p><strong>${escapeHtml(point.filename || '未知文件')}</strong></p>
+                <p>${escapeHtml([point.category, point.doc_type, point.source_type === 'spreadsheet' ? '报表数据' : '普通文档'].filter(Boolean).join(' · '))}</p>
+                ${chunk ? `<p>${escapeHtml(chunk)}</p>` : ''}
+                ${row ? `<p>${escapeHtml(row)}</p>` : ''}
+                <p>${escapeHtml(point.preview || '无预览')}</p>
+            `;
+        }
+
+        async function loadLogs() {
+            const container = document.getElementById('logContainer');
+            try {
+                const data = await apiFetch('/api/admin/logs');
+                if (!data.success) throw new Error(data.message || '加载失败');
+                const logs = data.logs || [];
+                container.innerHTML = logs.map((log) => {
+                    const label = log.action === 'login' ? '登录成功' : log.action === 'logout' ? '退出登录' : '登录失败';
+                    const cls = log.action === 'login' ? 'badge-ok' : log.action === 'logout' ? 'badge-info' : 'badge-bad';
+                    return `
+                        <div class="log-item">
+                            <div class="log-main">
+                                <strong>${escapeHtml(log.username || '-')}</strong>
+                                <span>${escapeHtml(formatDate(log.timestamp))} · ${escapeHtml(log.ip_address || '未知 IP')}</span>
+                            </div>
+                            <span class="badge ${cls}">${label}</span>
+                        </div>
+                    `;
+                }).join('') || '<div class="empty-state">暂无登录日志</div>';
+            } catch (error) {
+                container.innerHTML = '<div class="empty-state">日志加载失败</div>';
+                console.error('加载日志失败:', error);
+            }
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId)?.classList.remove('show');
+        }
+
+        function refreshCurrentTab() {
+            if (state.currentTab === 'dashboard') {
+                loadStats();
+                loadKnowledgeHealth();
+            }
+            if (state.currentTab === 'beta') loadBetaData();
+            if (state.currentTab === 'tokens') loadTokenUsage();
+            if (state.currentTab === 'users') loadUsers();
+            if (state.currentTab === 'knowledge') refreshKnowledgeAdminViews();
+            if (state.currentTab === 'logs') loadLogs();
+        }
+
+        function goToChat() {
+            window.location.href = '/chat';
+        }
+
+        async function logout() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+            } catch (error) {
+                console.warn('登出请求失败:', error);
+            }
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = '/login';
+        }
+
+        async function initAdmin() {
+            applyTheme(localStorage.getItem('theme') || 'light');
+            document.getElementById('createUserForm').addEventListener('submit', createUser);
+            await loadProfile();
+            await Promise.all([loadStats(), loadBetaData(), loadTokenUsage(), loadUsers(), loadDepartments(), loadKnowledgeHealth()]);
+        }
+
+        initAdmin();
+    </script>
+</body>
+</html>
