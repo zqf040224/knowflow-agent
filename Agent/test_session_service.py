@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 from session_service import SessionService, SessionServiceDependencies
 
 
@@ -117,6 +119,127 @@ def test_session_service_deletes_only_owned_sessions():
     assert memory.deleted == ["s1"]
     assert denied_status == 403
     assert denied == {"success": False, "error": "无权限删除此会话"}
+
+
+def test_session_service_cleans_graph_runs_after_memory_delete():
+    memory = FakeMemory()
+    cleaned = []
+    service = SessionService(SessionServiceDependencies(
+        memory=memory,
+        delete_graph_session=lambda session_id, user_id: cleaned.append((session_id, user_id)),
+    ))
+
+    payload, status = service.delete_session("user_1", "s1")
+
+    assert status == 200
+    assert payload["success"] is True
+    assert memory.deleted == ["s1"]
+    assert cleaned == [("s1", "user_1")]
+
+
+def test_session_service_reports_pending_graph_cleanup_without_restoring_memory():
+    memory = FakeMemory()
+    service = SessionService(SessionServiceDependencies(
+        memory=memory,
+        delete_graph_session=lambda _session_id, _user_id: True,
+    ))
+
+    payload, status = service.delete_session("user_1", "s1")
+
+    assert status == 200
+    assert payload == {
+        "success": True,
+        "message": "会话及其会话级记忆已删除",
+        "graph_cleanup_pending": True,
+    }
+    assert memory.deleted == ["s1"]
+
+
+def test_session_service_fails_closed_when_graph_barrier_cannot_be_persisted():
+    memory = FakeMemory()
+
+    def fail_barrier(_session_id, _user_id):
+        raise OSError("postgres unavailable before barrier")
+
+    service = SessionService(SessionServiceDependencies(
+        memory=memory,
+        delete_graph_session=fail_barrier,
+    ))
+
+    payload, status = service.delete_session("user_1", "s1")
+
+    assert status == 503
+    assert payload["success"] is False
+    assert memory.deleted == []
+
+
+def test_app_context_graph_delete_returns_pending_and_passes_artifact_phase():
+    from app_context import AppContext
+
+    calls = []
+
+    class FakeGraphPersistence:
+        def request_session_deletion(self, session_id, **kwargs):
+            calls.append((session_id, kwargs))
+            try:
+                kwargs["delete_artifact_run"]("run-1")
+            except OSError as exc:
+                return SimpleNamespace(failures={"run-1": str(exc)})
+            return SimpleNamespace(failures={})
+
+    class FailingArtifactStore:
+        def delete_run(self, run_id):
+            raise OSError(f"artifact busy: {run_id}")
+
+    context = SimpleNamespace(
+        graph_persistence=FakeGraphPersistence(),
+        graph_artifact_store=FailingArtifactStore(),
+    )
+
+    pending = AppContext.delete_graph_session(context, "s1", "user_1")
+
+    assert pending is True
+    assert calls[0][0] == "s1"
+    assert calls[0][1]["user_id"] == "user_1"
+    assert calls[0][1]["reason"] == "user_delete"
+    assert callable(calls[0][1]["delete_artifact_run"])
+
+
+def test_app_context_graph_delete_propagates_checkpoint_failure_result():
+    from app_context import AppContext
+
+    class FakeGraphPersistence:
+        def request_session_deletion(self, _session_id, **_kwargs):
+            return SimpleNamespace(
+                failures={"thread-1": "RuntimeError: checkpoint busy"}
+            )
+
+    context = SimpleNamespace(
+        graph_persistence=FakeGraphPersistence(),
+        graph_artifact_store=SimpleNamespace(delete_run=lambda _run_id: True),
+    )
+
+    assert AppContext.delete_graph_session(context, "s1", "user_1") is True
+
+
+def test_app_context_critical_usage_write_propagates_and_best_effort_does_not():
+    from app_context import AppContext
+
+    class FailingBetaOps:
+        def record_token_usage(self, **_kwargs):
+            raise OSError("usage database unavailable")
+
+    context = SimpleNamespace(beta_ops_service=FailingBetaOps())
+
+    with pytest.raises(OSError, match="usage database unavailable"):
+        AppContext.record_token_usage(context, user_id="user_1")
+    assert (
+        AppContext.record_token_usage_best_effort(
+            context,
+            user_id="user_1",
+        )
+        is None
+    )
 
 
 def test_session_service_limits_messages_and_profile_operations():

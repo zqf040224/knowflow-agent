@@ -16,17 +16,21 @@ class FakeContext:
 
 
 class FakeResult:
-    def __init__(self, *, content="", metadata=None):
+    def __init__(self, *, content="", metadata=None, success=True, error=""):
         self.content = content
         self.metadata = metadata or {}
+        self.success = success
+        self.error_info = {"error": error} if error else {}
 
 
 class FakeOrchestrator:
     MAX_TOTAL_ROUNDS = 3
 
-    def __init__(self, *, reflect=False):
+    def __init__(self, *, reflect=False, always_revise=False, fail_write=False, fail_review=False):
         self.reflect = reflect
-        self._reflection_done = False
+        self.always_revise = always_revise
+        self.fail_write = fail_write
+        self.fail_review = fail_review
         self.write_count = 0
         self.review_count = 0
         self.calls = []
@@ -47,12 +51,16 @@ class FakeOrchestrator:
     def _step_write(self, ctx, think_handler):
         self.write_count += 1
         self.calls.append(("write", self.write_count, ctx.last_document))
+        if self.fail_write:
+            return FakeResult(success=False, error="writer unavailable")
         return FakeResult(content=f"doc-v{self.write_count}")
 
     def _step_review(self, ctx, document_content, think_handler):
         self.review_count += 1
         self.calls.append(("review", self.review_count, document_content))
-        needs_revision = self.review_count == 1 and not self.reflect
+        if self.fail_review:
+            return FakeResult(success=False, error="review unavailable")
+        needs_revision = self.always_revise or (self.review_count == 1 and not self.reflect)
         return FakeResult(metadata={
             "needs_revision": needs_revision,
             "revision_focus": ["结构"],
@@ -116,6 +124,8 @@ def test_document_linear_runner_revises_until_review_passes():
     result = DocumentLinearRunner(orchestrator).run(prepared_run(), think_handler=on_think)
 
     assert result.document_content == "doc-v2"
+    assert result.quality_status == "passed"
+    assert result.revisions_applied == 1
     assert [item["step"] for item in result.ctx.run_records] == [
         "context_plan",
         "retrieval",
@@ -138,7 +148,7 @@ def test_document_linear_runner_can_reflect_before_success():
 
     assert result.document_content == "doc-v1"
     assert ("reflection", "doc-v1") in orchestrator.calls
-    assert orchestrator._reflection_done is True
+    assert [call[0] for call in orchestrator.calls].count("reflection") == 1
     assert [item["step"] for item in result.ctx.run_records] == [
         "context_plan",
         "retrieval",
@@ -147,3 +157,29 @@ def test_document_linear_runner_can_reflect_before_success():
         "reflection",
     ]
     assert result.ctx.revision_history[-1]["source"] == "reflection"
+
+
+def test_document_linear_runner_marks_max_revisions_without_pass_message():
+    orchestrator = FakeOrchestrator(always_revise=True)
+    events, on_think = think_collector()
+
+    result = DocumentLinearRunner(orchestrator).run(prepared_run(), think_handler=on_think)
+
+    assert result.document_content == "doc-v3"
+    assert result.quality_status == "max_revisions"
+    assert result.revisions_applied == 2
+    assert any("已达最大修订轮次" in message for _a, _e, message in events)
+    assert not any(a == "Reviewer" and "审核通过" in message for a, _e, message in events)
+
+
+def test_document_linear_runner_fails_closed_on_writer_or_reviewer():
+    for orchestrator in (
+        FakeOrchestrator(fail_write=True),
+        FakeOrchestrator(fail_review=True),
+    ):
+        _events, on_think = think_collector()
+        try:
+            DocumentLinearRunner(orchestrator).run(prepared_run(), think_handler=on_think)
+        except RuntimeError:
+            continue
+        raise AssertionError("runner must fail closed")

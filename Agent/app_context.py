@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 
 from flask import g, jsonify, request, send_file
 
@@ -78,6 +79,8 @@ class AppContext:
     review_proposal_template_path: Path
     reimbursement_template_dir: Path
     reimbursement_template_files: dict
+    graph_persistence: Any
+    graph_artifact_store: Any
     cookie_secure: bool
     max_request_size: int = MAX_REQUEST_SIZE
     rate_limits: dict = field(default_factory=new_rate_limit_store)
@@ -166,24 +169,57 @@ class AppContext:
         )
 
     def record_token_usage(self, **kwargs) -> None:
+        """Persist billable usage; callers treat failure as a failed commit."""
+
+        self.beta_ops_service.record_token_usage(**kwargs)
+
+    def record_token_usage_best_effort(self, **kwargs) -> None:
+        """Record non-critical failure telemetry without masking its root error."""
+
         try:
-            self.beta_ops_service.record_token_usage(**kwargs)
+            self.record_token_usage(**kwargs)
         except Exception as exc:
-            logger.warning("Token 使用记录失败: %s", exc)
+            logger.warning("Best-effort token 使用记录失败: %s", exc)
 
     def record_agent_run_token_usage(self, run_records: list, *, user_id: str,
                                      user_info: UserInfo = None, session_id: str = "",
-                                     mode: str = "agent") -> None:
+                                     mode: str = "agent", run_id: str = "",
+                                     effect_scope: str = "") -> None:
+        """Persist per-agent billable usage as part of the success commit."""
+
+        self.beta_ops_service.record_agent_run_token_usage(
+            run_records,
+            user_id=user_id,
+            user_info=user_info,
+            session_id=session_id,
+            mode=mode,
+            run_id=run_id,
+            effect_scope=effect_scope,
+        )
+
+    def record_agent_run_token_usage_best_effort(
+        self,
+        run_records: list,
+        *,
+        user_id: str,
+        user_info: UserInfo = None,
+        session_id: str = "",
+        mode: str = "agent",
+        run_id: str = "",
+        effect_scope: str = "",
+    ) -> None:
         try:
-            self.beta_ops_service.record_agent_run_token_usage(
+            self.record_agent_run_token_usage(
                 run_records,
                 user_id=user_id,
                 user_info=user_info,
                 session_id=session_id,
                 mode=mode,
+                run_id=run_id,
+                effect_scope=effect_scope,
             )
         except Exception as exc:
-            logger.warning("Agent token 使用记录失败: %s", exc)
+            logger.warning("Best-effort Agent token 使用记录失败: %s", exc)
 
     def get_token_usage_dashboard(self, limit: int = 120) -> dict:
         return self.beta_ops_service.token_usage_dashboard(limit)
@@ -312,6 +348,9 @@ class AppContext:
                 resolve_export_template=resolve_export_template,
                 record_token_usage=self.record_token_usage,
                 record_agent_run_token_usage=self.record_agent_run_token_usage,
+                record_token_usage_best_effort=self.record_token_usage_best_effort,
+                graph_persistence=self.graph_persistence,
+                graph_artifact_store=self.graph_artifact_store,
             ))
         return self.chat_container_instance
 
@@ -345,6 +384,11 @@ class AppContext:
         if self.session_service_instance is None:
             self.session_service_instance = SessionService(SessionServiceDependencies(
                 memory=self.memory,
+                delete_graph_session=(
+                    self.delete_graph_session
+                    if self.graph_persistence is not None
+                    else None
+                ),
             ))
         return self.session_service_instance
 
@@ -386,8 +430,28 @@ class AppContext:
                 build_access_filter=build_access_filter,
                 build_vector_map=build_vector_map,
                 now_factory=datetime.now,
+                graph_health=lambda: self.chat_runtime().health(),
             ))
         return self.runtime_query_service_instance
+
+    def delete_graph_session(self, session_id: str, user_id: str) -> bool:
+        """Schedule durable checkpoint deletion and remove run attachment snapshots."""
+        if self.graph_persistence is None:
+            return False
+        result = self.graph_persistence.request_session_deletion(
+            session_id,
+            user_id=user_id,
+            reason="user_delete",
+            delete_artifact_run=self.graph_artifact_store.delete_run,
+        )
+        cleanup_pending = bool(result.failures)
+        if cleanup_pending:
+            logger.warning(
+                "LangGraph 会话清理已入队等待重试 session=%s failures=%s",
+                session_id,
+                sorted(result.failures),
+            )
+        return cleanup_pending
 
     def knowledge_admin_read_service(self) -> KnowledgeAdminReadService:
         if self.knowledge_admin_read_service_instance is None:
@@ -463,7 +527,20 @@ class AppContext:
 
     def request_orchestrator(self, session_id: str, *, profile=None, user_info=None) -> AgentOrchestrator:
         """Create an isolated orchestrator for one request to avoid cross-user state bleed."""
-        runner = AgentOrchestrator(memory=self.memory, session_id=session_id)
+        runner = AgentOrchestrator(
+            memory=self.memory,
+            session_id=session_id,
+            graph_checkpointer=(
+                self.graph_persistence.checkpointer
+                if self.graph_persistence is not None
+                else None
+            ),
+            graph_durability=(
+                self.graph_persistence.config.default_durability
+                if self.graph_persistence is not None
+                else "async"
+            ),
+        )
         payload = self.profile_payload(profile)
         if payload:
             runner.set_user_profile(payload)

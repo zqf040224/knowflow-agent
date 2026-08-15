@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
 class SessionServiceDependencies:
     memory: Any
+    delete_graph_session: Callable[[str, str], bool | None] | None = None
 
 
 class SessionService:
@@ -59,8 +64,30 @@ class SessionService:
         if not self._owns_session(user_id, session_id):
             return {"success": False, "error": "无权限删除此会话"}, 403
 
+        cleanup_pending = False
+        if self.deps.delete_graph_session:
+            try:
+                cleanup_pending = bool(
+                    self.deps.delete_graph_session(session_id, user_id)
+                )
+            except Exception as exc:
+                # Exceptions escape only when the durable session barrier could
+                # not be confirmed. Fail closed: deleting business memory here
+                # would return success while active graph workers can still
+                # append data and no cleanup job exists to stop them.
+                logger.error("LangGraph 会话删除屏障写入失败 session=%s: %s", session_id, exc)
+                return {
+                    "success": False,
+                    "error": "会话删除暂不可用，请稍后重试",
+                }, 503
+        # Delete business memory after the graph deletion barrier is durable so
+        # a concurrent worker observes cancellation before it can append more
+        # messages to the session.
         self.deps.memory.delete_session(session_id)
-        return {"success": True, "message": "会话及其会话级记忆已删除"}, 200
+        payload = {"success": True, "message": "会话及其会话级记忆已删除"}
+        if cleanup_pending:
+            payload["graph_cleanup_pending"] = True
+        return payload, 200
 
     def get_session_messages(self, user_id: str, session_id: str, *, limit: int = 20) -> tuple[dict, int]:
         if not self._owns_session(user_id, session_id):

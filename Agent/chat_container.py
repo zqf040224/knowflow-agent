@@ -7,7 +7,6 @@ capabilities should be wired here instead of adding alternate /api/chat paths.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -36,6 +35,9 @@ class ChatContainerDependencies:
     record_token_usage: Callable[..., None]
     record_agent_run_token_usage: Callable[..., None]
     intent_classifier: Optional[Callable[[dict[str, Any]], Any]] = None
+    graph_persistence: Any = None
+    graph_artifact_store: Any = None
+    record_token_usage_best_effort: Optional[Callable[..., None]] = None
 
 
 class ChatServiceContainer:
@@ -87,6 +89,10 @@ class ChatServiceContainer:
                 resolve_export_template=self.deps.resolve_export_template,
                 record_agent_run_token_usage=self.deps.record_agent_run_token_usage,
                 record_token_usage=self.deps.record_token_usage,
+                record_token_usage_best_effort=(
+                    self.deps.record_token_usage_best_effort
+                    or self.deps.record_token_usage
+                ),
             ))
         return self._document_draft_service
 
@@ -168,8 +174,9 @@ class ChatServiceContainer:
         return self._tool_orchestrator
 
     def chat_runtime(self) -> ChatGraphRuntime:
+        runtime_mode = ChatGraphRuntime.resolve_runtime_mode()
         signature = (
-            os.getenv("CHAT_RUNTIME", "langgraph"),
+            runtime_mode,
             bool(self.deps.intent_classifier),
         )
         if self._runtime is None or self._runtime_signature != signature:
@@ -184,6 +191,13 @@ class ChatServiceContainer:
                 rag_qa_stream=self.rag_qa_service().stream,
                 task_planner=self.task_planner(),
                 tool_orchestrator=self.tool_orchestrator(),
-            ))
+                checkpointer=(
+                    self.deps.graph_persistence.checkpointer
+                    if self.deps.graph_persistence is not None
+                    else None
+                ),
+                persistence=self.deps.graph_persistence,
+                artifact_store=self.deps.graph_artifact_store,
+            ), runtime_mode=runtime_mode)
             self._runtime_signature = signature
         return self._runtime

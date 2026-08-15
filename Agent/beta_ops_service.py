@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, Optional
@@ -76,6 +77,7 @@ class BetaOpsService:
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS beta_token_usage (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    effect_key TEXT,
                     user_id TEXT DEFAULT '',
                     username TEXT DEFAULT '',
                     department TEXT DEFAULT '',
@@ -98,9 +100,27 @@ class BetaOpsService:
                     created_at TEXT
                 )
             ''')
+            token_usage_columns = {
+                row['name']
+                for row in cursor.execute('PRAGMA table_info(beta_token_usage)').fetchall()
+            }
+            if 'effect_key' not in token_usage_columns:
+                try:
+                    cursor.execute('ALTER TABLE beta_token_usage ADD COLUMN effect_key TEXT')
+                except sqlite3.OperationalError as exc:
+                    # The memory layer currently uses SQLite. Concurrent
+                    # workers may both observe the legacy schema before one
+                    # of them wins the ALTER TABLE race.
+                    if 'duplicate column name' not in str(exc).lower():
+                        raise
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_beta_token_usage_created ON beta_token_usage(created_at)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_beta_token_usage_user ON beta_token_usage(user_id, created_at)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_beta_token_usage_mode ON beta_token_usage(mode, created_at)')
+            cursor.execute('''
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_beta_token_usage_effect_key_unique
+                ON beta_token_usage(effect_key)
+                WHERE effect_key IS NOT NULL AND effect_key <> ''
+            ''')
             conn.commit()
 
     def record_feedback(self, data: dict, *, actor: BetaActor, request_meta: BetaRequestMeta) -> dict:
@@ -291,6 +311,7 @@ class BetaOpsService:
         temperature: float = 0,
         status: str = "success",
         error_message: str = "",
+        effect_key: Optional[str] = None,
     ) -> None:
         if estimated_prompt_tokens is None:
             estimated_prompt_tokens = self._estimate_tokens_from_chars(prompt_chars)
@@ -305,14 +326,16 @@ class BetaOpsService:
         with self.deps.memory._get_conn() as conn:
             conn.execute('''
                 INSERT INTO beta_token_usage (
-                    user_id, username, department, session_id, mode, agent, model,
+                    effect_key, user_id, username, department, session_id, mode, agent, model,
                     stream, prompt_chars, completion_chars, reasoning_chars,
                     estimated_prompt_tokens, estimated_completion_tokens,
                     estimated_total_tokens, duration_ms, max_tokens, temperature,
                     status, error_message, created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT DO NOTHING
             ''', (
+                str(effect_key or "").strip() or None,
                 user_id or "",
                 username,
                 department,
@@ -336,11 +359,36 @@ class BetaOpsService:
             ))
             conn.commit()
 
-    def record_agent_run_token_usage(self, run_records: list, *, user_id: str, user_info: Any = None, session_id: str = "", mode: str = "agent") -> None:
-        for record in run_records or []:
+    def record_agent_run_token_usage(
+        self,
+        run_records: list,
+        *,
+        user_id: str,
+        user_info: Any = None,
+        session_id: str = "",
+        mode: str = "agent",
+        run_id: str = "",
+        node: str = "tool_draft_document",
+        effect_scope: str = "",
+    ) -> None:
+        normalized_scope = str(effect_scope or "").strip()
+        effect_prefix = f"{run_id}:{node}"
+        if normalized_scope:
+            effect_prefix = f"{effect_prefix}:{normalized_scope}"
+        for index, record in enumerate(run_records or []):
             usage = record.get("llm_usage") or {}
             if not usage:
                 continue
+            agent_name = str(usage.get("agent") or record.get("step", "") or "agent")
+            safe_agent_name = "".join(
+                character if character.isalnum() or character in {"_", "-"} else "_"
+                for character in agent_name
+            )[:80]
+            effect_key = (
+                f"{effect_prefix}:token_usage_{index}_{safe_agent_name}"
+                if run_id
+                else None
+            )
             self.record_token_usage(
                 user_id=user_id,
                 user_info=user_info,
@@ -359,6 +407,7 @@ class BetaOpsService:
                 max_tokens=usage.get("max_tokens", 0),
                 temperature=usage.get("temperature", 0),
                 status="success",
+                effect_key=effect_key,
             )
 
     def token_usage_dashboard(self, limit: int = 120) -> dict:

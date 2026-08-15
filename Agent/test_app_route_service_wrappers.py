@@ -132,6 +132,97 @@ def test_chat_route_delegates_only_to_chat_runtime(monkeypatch):
     assert calls == [({"message": "你好"}, "user_1", user_info)]
 
 
+def test_chat_route_returns_409_for_synchronous_request_identity_conflict(monkeypatch):
+    import app as app_module
+    from chat_runtime import ChatRunConflictError
+
+    class FakeRuntime:
+        def stream(self, _data, *, user_id, user_info):
+            raise ChatRunConflictError("idempotency payload mismatch")
+
+    monkeypatch.setattr(app_module.context, "chat_runtime", lambda: FakeRuntime())
+    monkeypatch.setattr(app_module.context, "get_user_info", lambda: object())
+
+    with app_module.app.test_request_context(
+        "/api/chat", method="POST", json={"message": "changed"}
+    ):
+        g.user_id = "user_1"
+        response, status = app_module.app.view_functions["chat"].__wrapped__.__wrapped__()
+
+    assert status == 409
+    assert response.get_json() == {
+        "success": False,
+        "error": "idempotency payload mismatch",
+    }
+
+
+def test_chat_route_uses_pre_reserved_http_stream_for_identity_conflicts(monkeypatch):
+    import app as app_module
+    from chat_runtime import ChatRunConflictError
+
+    class FakeRuntime:
+        def stream(self, *_args, **_kwargs):
+            raise AssertionError("HTTP route must not use the lazy stream entry point")
+
+        def stream_http(self, _data, *, user_id, user_info):
+            raise ChatRunConflictError("concurrent identity conflict")
+
+    monkeypatch.setattr(app_module.context, "chat_runtime", lambda: FakeRuntime())
+    monkeypatch.setattr(app_module.context, "get_user_info", lambda: object())
+
+    with app_module.app.test_request_context(
+        "/api/chat", method="POST", json={"message": "same"}
+    ):
+        g.user_id = "user_1"
+        response, status = app_module.app.view_functions[
+            "chat"
+        ].__wrapped__.__wrapped__()
+
+    assert status == 409
+    assert response.get_json() == {
+        "success": False,
+        "error": "concurrent identity conflict",
+    }
+
+
+def test_chat_run_status_and_resume_routes_enforce_runtime_boundary(monkeypatch):
+    import app as app_module
+
+    calls = []
+    user_info = object()
+
+    class FakeRuntime:
+        def run_status(self, run_id, *, user_id):
+            calls.append(("status", run_id, user_id))
+            return {"run_id": run_id, "status": "interrupted"}
+
+        def resume(self, run_id, value, *, user_id, user_info, interrupt_id):
+            calls.append(("resume", run_id, value, user_id, user_info, interrupt_id))
+            yield 'data: {"type":"done"}\n\n'
+
+    monkeypatch.setattr(app_module.context, "chat_runtime", lambda: FakeRuntime())
+    monkeypatch.setattr(app_module.context, "get_user_info", lambda: user_info)
+
+    with app_module.app.test_request_context("/api/chat/runs/run-1", method="GET"):
+        g.user_id = "user_1"
+        response = app_module.app.view_functions["chat_run_status"].__wrapped__("run-1")
+    assert response.get_json()["run"]["status"] == "interrupted"
+
+    with app_module.app.test_request_context(
+        "/api/chat/runs/run-1/resume",
+        method="POST",
+        json={"decision": "approve", "interrupt_id": "int-1"},
+    ):
+        g.user_id = "user_1"
+        response = app_module.app.view_functions["resume_chat_run"].__wrapped__.__wrapped__("run-1")
+    assert response.mimetype == "text/event-stream"
+    assert '"done"' in "".join(response.response)
+    assert calls == [
+        ("status", "run-1", "user_1"),
+        ("resume", "run-1", "approve", "user_1", user_info, "int-1"),
+    ]
+
+
 def test_reindex_route_returns_404_before_job_when_record_missing(monkeypatch):
     import app as app_module
 

@@ -39,6 +39,7 @@ uploads/*
 Agent/uploads/
 Agent/temp_uploads/
 Agent/outputs/
+Agent/graph_runs/
 
 # 向量库和知识库运行产物
 *.faiss

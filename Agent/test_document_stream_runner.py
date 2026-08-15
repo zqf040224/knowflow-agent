@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 from agents.document_stream_runner import DocumentStreamRunner
 
 
@@ -23,13 +25,15 @@ class FakeContext:
 
 
 class FakeResult:
-    def __init__(self, *, metadata=None):
+    def __init__(self, *, metadata=None, success=True, error=""):
         self.metadata = metadata or {}
+        self.success = success
+        self.error_info = {"error": error} if error else {}
 
 
 class FakeWriter:
     def __init__(self, chunks=None):
-        self.chunks = chunks or ["正文"]
+        self.chunks = ["正文"] if chunks is None else chunks
 
     def process_stream(self, payload):
         self.payload = payload
@@ -40,9 +44,10 @@ class FakeWriter:
 class FakeOrchestrator:
     MAX_TOTAL_ROUNDS = 3
 
-    def __init__(self):
+    def __init__(self, *, always_revise=False, fail_review=False):
         self.think_log = []
-        self._reflection_done = False
+        self.always_revise = always_revise
+        self.fail_review = fail_review
         self.writer = FakeWriter()
         self.reflection = None
         self.memory = None
@@ -61,8 +66,10 @@ class FakeOrchestrator:
         return ctx
 
     def _step_review(self, ctx, document_content, cb):
+        if self.fail_review:
+            return FakeResult(success=False, error="review unavailable")
         return FakeResult(metadata={
-            "needs_revision": False,
+            "needs_revision": self.always_revise,
             "spreadsheet_audit": {"ok": True},
             "confidence": 0.9,
         })
@@ -97,6 +104,29 @@ class FakeOrchestrator:
     def _source_details(self, ctx):
         return [{"filename": "source.docx"}]
 
+    def _context_snapshot(self, ctx):
+        return {"document_type": ctx.plan.get("document_type", "")}
+
+
+class RecordingMemory:
+    def __init__(self):
+        self.messages = []
+        self.summaries = []
+        self.context = {}
+
+    def add_message(self, session_id, role, content, metadata=None):
+        self.messages.append((session_id, role, content, metadata or {}))
+
+    def set_context(self, session_id, key, value):
+        self.context[(session_id, key)] = value
+
+    def update_rolling_summary(
+        self, session_id, message, response, plan, sources, *, effect_key=None
+    ):
+        self.summaries.append(
+            (session_id, message, response, plan, sources, effect_key)
+        )
+
 
 def test_document_stream_runner_emits_public_event_contract():
     orchestrator = FakeOrchestrator()
@@ -117,9 +147,120 @@ def test_document_stream_runner_emits_public_event_contract():
     assert done["document"] == "正文"
     assert done["source_filenames"] == ["source.docx"]
     assert done["audit_summary"] == {"ok": True}
+    assert done["quality_status"] == "passed"
     assert [record["step"] for record in done["run_records"]] == [
         "context_plan",
         "retrieval",
         "write",
         "review",
     ]
+
+
+def test_document_stream_runner_marks_max_revisions_without_pass_message():
+    events = list(DocumentStreamRunner(FakeOrchestrator(always_revise=True)).run(
+        SimpleNamespace(request_with_context="写通知", previous_context="", run_id="run-max"),
+        user_request="写通知",
+    ))
+
+    done = events[-1]
+    assert done["quality_status"] == "max_revisions"
+    assert done["revision_rounds"] == 2
+    assert done["run_id"] == "run-max"
+    assert any(event.get("type") == "think" and "已达最大修订轮次" in event["message"] for event in events)
+    assert not any(
+        event.get("type") == "think"
+        and event.get("agent") == "Reviewer"
+        and "审核通过" in event.get("message", "")
+        for event in events
+    )
+
+
+def test_document_stream_runner_fails_closed_when_reviewer_unavailable():
+    with pytest.raises(RuntimeError, match="review unavailable"):
+        list(DocumentStreamRunner(FakeOrchestrator(fail_review=True)).run(
+            SimpleNamespace(request_with_context="写通知", previous_context=""),
+            user_request="写通知",
+        ))
+
+
+def test_document_stream_runner_fails_closed_before_review_when_writer_is_empty():
+    orchestrator = FakeOrchestrator()
+    orchestrator.writer = FakeWriter([])
+    orchestrator._step_review = lambda *_args, **_kwargs: pytest.fail(
+        "Reviewer must not run for an empty draft"
+    )
+
+    with pytest.raises(RuntimeError, match="Writer returned empty document content"):
+        list(DocumentStreamRunner(orchestrator).run(
+            SimpleNamespace(request_with_context="写通知", previous_context=""),
+            user_request="写通知",
+        ))
+
+
+def test_document_stream_runner_forwards_parent_run_effect_keys_to_memory():
+    orchestrator = FakeOrchestrator()
+    orchestrator.memory = RecordingMemory()
+    orchestrator.session_id = "session-1"
+    orchestrator._current_effect_run_id = "parent-run"
+
+    list(DocumentStreamRunner(orchestrator).run(
+        SimpleNamespace(
+            request_with_context="写通知",
+            previous_context="",
+            run_id="parent-run",
+        ),
+        user_request="写通知",
+    ))
+
+    assert orchestrator.memory.messages[0][3]["effect_key"] == (
+        "parent-run:tool_draft_document:message_assistant"
+    )
+    assert orchestrator.memory.summaries[0][-1] == (
+        "parent-run:tool_draft_document:rolling_summary"
+    )
+
+
+def test_document_stream_runner_scopes_effect_keys_and_uses_safe_summary_text():
+    orchestrator = FakeOrchestrator()
+    orchestrator.memory = RecordingMemory()
+    orchestrator.session_id = "session-1"
+    orchestrator._current_effect_run_id = "parent-run"
+
+    list(DocumentStreamRunner(orchestrator).run(
+        SimpleNamespace(
+            request_with_context="写通知\n\n[文件内容]SECRET_ATTACHMENT_BODY",
+            previous_context="",
+            run_id="parent-run",
+            persisted_user_message="请根据附件起草通知",
+            effect_scope="step:2",
+        ),
+        user_request="写通知\n\n[文件内容]SECRET_ATTACHMENT_BODY",
+    ))
+
+    assert orchestrator.memory.messages[0][3]["effect_key"] == (
+        "parent-run:tool_draft_document:step:2:message_assistant"
+    )
+    assert orchestrator.memory.summaries[0][1] == "请根据附件起草通知"
+    assert "SECRET_ATTACHMENT_BODY" not in orchestrator.memory.summaries[0][1]
+    assert orchestrator.memory.summaries[0][-1] == (
+        "parent-run:tool_draft_document:step:2:rolling_summary"
+    )
+
+
+def test_document_stream_runner_does_not_key_generated_rollback_run():
+    orchestrator = FakeOrchestrator()
+    orchestrator.memory = RecordingMemory()
+    orchestrator.session_id = "session-1"
+    orchestrator._current_effect_run_id = ""
+
+    list(DocumentStreamRunner(orchestrator).run(
+        SimpleNamespace(
+            request_with_context="写通知",
+            previous_context="",
+            run_id="internally-generated-run",
+        ),
+        user_request="写通知",
+    ))
+
+    assert "effect_key" not in orchestrator.memory.messages[0][3]
+    assert orchestrator.memory.summaries[0][-1] is None

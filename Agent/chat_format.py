@@ -14,6 +14,26 @@ from spreadsheet_auditor import SpreadsheetFactAuditor
 logger = logging.getLogger(__name__)
 
 
+def _effect_key(user_metadata: Any, effect: str) -> str | None:
+    metadata = user_metadata if isinstance(user_metadata, dict) else {}
+    run_id = str(metadata.get("run_id") or "").strip()
+    if not run_id:
+        return None
+    scope = str(metadata.get("effect_scope") or "").strip()
+    node = f"tool_format_document:{scope}" if scope else "tool_format_document"
+    return f"{run_id}:{node}:{effect}"
+
+
+def _message_metadata(metadata: Any, effect: str, **values: Any) -> dict:
+    result = dict(metadata or {}) if isinstance(metadata, dict) else {}
+    result.pop("effect_key", None)
+    result.update(values)
+    effect_key = _effect_key(metadata, effect)
+    if effect_key:
+        result["effect_key"] = effect_key
+    return result
+
+
 @dataclass
 class DocumentFormatDependencies:
     memory: Any
@@ -40,7 +60,12 @@ class DocumentFormatStreamService:
     ):
         """快速模式 - 格式转换/排版处理，保留原文内容仅改格式."""
         stored_user_message = display_message or message
-        self.deps.memory.add_message(session_id, "user", stored_user_message, metadata=user_metadata or {})
+        self.deps.memory.add_message(
+            session_id,
+            "user",
+            stored_user_message,
+            metadata=_message_metadata(user_metadata, "message_user"),
+        )
 
         yield sse({"type": "start"})
         yield sse({"type": "session", "session_id": session_id})
@@ -125,9 +150,22 @@ class DocumentFormatStreamService:
                 session_id,
                 "assistant",
                 doc_content,
-                metadata={"plan": plan, "type": "document", "audit_summary": audit_summary},
+                metadata=_message_metadata(
+                    user_metadata,
+                    "message_assistant",
+                    plan=plan,
+                    type="document",
+                    audit_summary=audit_summary,
+                ),
             )
-            self._record_writer_usage(writer, user_id, user_info, session_id, has_file_content)
+            self._record_writer_usage(
+                writer,
+                user_id,
+                user_info,
+                session_id,
+                has_file_content,
+                effect_key=_effect_key(user_metadata, "token_usage_writer"),
+            )
 
             source_filenames = list(dict.fromkeys(
                 s.get("filename") or Path(s.get("source", "")).name
@@ -138,7 +176,14 @@ class DocumentFormatStreamService:
             self.deps.memory.set_context(session_id, "last_request", stored_user_message)
             self.deps.memory.set_context(session_id, "last_document", doc_content)
             self.deps.memory.set_context(session_id, "last_plan", plan)
-            self.deps.memory.update_rolling_summary(session_id, stored_user_message, doc_content, plan, source_filenames)
+            self.deps.memory.update_rolling_summary(
+                session_id,
+                stored_user_message,
+                doc_content,
+                plan,
+                source_filenames,
+                effect_key=_effect_key(user_metadata, "rolling_summary"),
+            )
 
             yield sse({"type": "run_done", "session_id": session_id, "intent": route_intent(route, INTENT_DOC_FORMATTING)})
             yield sse({
@@ -168,6 +213,7 @@ class DocumentFormatStreamService:
                 prompt_chars=len(message or ""),
                 status="failed",
                 error_message=str(exc),
+                effect_key=_effect_key(user_metadata, "token_usage_writer"),
             )
             yield sse({"type": "error", "message": "生成失败，请稍后重试"})
 
@@ -185,7 +231,16 @@ class DocumentFormatStreamService:
                 "spreadsheet_evidence_count": 0,
             }
 
-    def _record_writer_usage(self, writer, user_id, user_info, session_id, has_file_content: bool) -> None:
+    def _record_writer_usage(
+        self,
+        writer,
+        user_id,
+        user_info,
+        session_id,
+        has_file_content: bool,
+        *,
+        effect_key: str | None = None,
+    ) -> None:
         usage = getattr(writer, "last_usage", {}) or {}
         if not usage:
             return
@@ -207,4 +262,5 @@ class DocumentFormatStreamService:
             max_tokens=usage.get("max_tokens", 0),
             temperature=usage.get("temperature", 0),
             status="success",
+            effect_key=effect_key,
         )

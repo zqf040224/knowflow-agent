@@ -35,6 +35,26 @@ from chat_events import (
 logger = logging.getLogger(__name__)
 
 
+def _effect_key(user_metadata: Any, effect: str) -> str | None:
+    metadata = user_metadata if isinstance(user_metadata, dict) else {}
+    run_id = str(metadata.get("run_id") or "").strip()
+    if not run_id:
+        return None
+    scope = str(metadata.get("effect_scope") or "").strip()
+    node = f"tool_knowledge_qa:{scope}" if scope else "tool_knowledge_qa"
+    return f"{run_id}:{node}:{effect}"
+
+
+def _message_metadata(metadata: Any, effect: str, **values: Any) -> dict:
+    result = dict(metadata or {}) if isinstance(metadata, dict) else {}
+    result.pop("effect_key", None)
+    result.update(values)
+    effect_key = _effect_key(metadata, effect)
+    if effect_key:
+        result["effect_key"] = effect_key
+    return result
+
+
 def chat_context_for_model(context: str) -> str:
     """Keep answer context useful while hiding internal retrieval coordinates."""
     if not context:
@@ -156,7 +176,12 @@ class RagQaStreamService:
         """普通聊天流式响应."""
         stored_user_message = display_message or message
         memory = self.deps.memory
-        memory.add_message(session_id, "user", stored_user_message, metadata=user_metadata or {})
+        memory.add_message(
+            session_id,
+            "user",
+            stored_user_message,
+            metadata=_message_metadata(user_metadata, "message_user"),
+        )
 
         yield sse({"type": "start"})
         yield sse({"type": "session", "session_id": session_id})
@@ -180,6 +205,7 @@ class RagQaStreamService:
                 session_id=session_id,
                 user_id=user_id,
                 user_info=user_info,
+                user_metadata=user_metadata,
             )
         yield sse({
             "type": "think",
@@ -218,6 +244,7 @@ class RagQaStreamService:
                 audit_summary=build_audit_summary(answer_plan, evidence),
                 user_id=user_id,
                 user_info=user_info,
+                user_metadata=user_metadata,
             )
             return
 
@@ -277,6 +304,7 @@ class RagQaStreamService:
                 user_id=user_id,
                 user_info=user_info,
                 source_results=result.metadata.get("results", []) if result.success else [],
+                user_metadata=user_metadata,
             )
             return
 
@@ -303,6 +331,7 @@ class RagQaStreamService:
                 user_id=user_id,
                 user_info=user_info,
                 source_results=deterministic_sources,
+                user_metadata=user_metadata,
             )
             return
 
@@ -319,6 +348,7 @@ class RagQaStreamService:
                 prompt_chars=len(message or "") + len(context or ""),
                 status="failed",
                 error_message="DEEPSEEK_API_KEY 未配置",
+                effect_key=_effect_key(user_metadata, "token_usage_chat"),
             )
             yield sse({"type": "error", "message": "模型 API Key 未配置，请先在服务端配置 DEEPSEEK_API_KEY"})
             return
@@ -379,12 +409,19 @@ class RagQaStreamService:
 
         source_filenames = evidence.top_sources
         audit_summary = build_audit_summary(answer_plan, evidence, verification)
-        memory.add_message(session_id, "assistant", full_response, metadata={
-            "type": route_intent(route, INTENT_KNOWLEDGE_QA),
-            "route": route_payload(route),
-            "actions": route_actions(route),
-            "audit_summary": audit_summary,
-        })
+        memory.add_message(
+            session_id,
+            "assistant",
+            full_response,
+            metadata=_message_metadata(
+                user_metadata,
+                "message_assistant",
+                type=route_intent(route, INTENT_KNOWLEDGE_QA),
+                route=route_payload(route),
+                actions=route_actions(route),
+                audit_summary=audit_summary,
+            ),
+        )
         self.deps.record_token_usage(
             user_id=user_id,
             user_info=user_info,
@@ -397,6 +434,7 @@ class RagQaStreamService:
             completion_chars=len(full_response),
             duration_ms=int((time.time() - chat_start) * 1000),
             status="success",
+            effect_key=_effect_key(user_metadata, "token_usage_chat"),
         )
         unique_sources = list(dict.fromkeys(
             f[0] if isinstance(f, tuple) else f for f in source_filenames
@@ -404,7 +442,14 @@ class RagQaStreamService:
         memory.set_context(session_id, "last_request", stored_user_message)
         memory.set_context(session_id, "last_answer", full_response)
         memory.set_context(session_id, "last_answer_plan", response_plan)
-        memory.update_rolling_summary(session_id, stored_user_message, full_response, response_plan, unique_sources)
+        memory.update_rolling_summary(
+            session_id,
+            stored_user_message,
+            full_response,
+            response_plan,
+            unique_sources,
+            effect_key=_effect_key(user_metadata, "rolling_summary"),
+        )
 
         source_details = source_details_from_results(result.metadata.get("results", []) if result.success else [])
         yield sse({"type": "run_done", "session_id": session_id, "intent": route_intent(route, INTENT_KNOWLEDGE_QA)})
@@ -475,6 +520,7 @@ class RagQaStreamService:
         user_id: str,
         user_info=None,
         source_results=None,
+        user_metadata=None,
     ):
         source_results = source_results or []
         source_details = source_details_from_results(source_results)
@@ -484,12 +530,19 @@ class RagQaStreamService:
         yield sse({"type": "answer_start", "message": "开始输出正文", "session_id": session_id})
         yield from text_stream_sse(answer, session_id=session_id)
         yield sse({"type": "answer_done", "answer": answer, "session_id": session_id})
-        memory.add_message(session_id, "assistant", answer, metadata={
-            "type": route_intent(route, INTENT_KNOWLEDGE_QA),
-            "route": route_payload(route),
-            "actions": route_actions(route),
-            "audit_summary": audit_summary,
-        })
+        memory.add_message(
+            session_id,
+            "assistant",
+            answer,
+            metadata=_message_metadata(
+                user_metadata,
+                "message_assistant",
+                type=route_intent(route, INTENT_KNOWLEDGE_QA),
+                route=route_payload(route),
+                actions=route_actions(route),
+                audit_summary=audit_summary,
+            ),
+        )
         self.deps.record_token_usage(
             user_id=user_id,
             user_info=user_info,
@@ -500,11 +553,19 @@ class RagQaStreamService:
             prompt_chars=len(stored_user_message or ""),
             completion_chars=len(answer or ""),
             status="skipped",
+            effect_key=_effect_key(user_metadata, "token_usage_chat"),
         )
         memory.set_context(session_id, "last_request", stored_user_message)
         memory.set_context(session_id, "last_answer", answer)
         memory.set_context(session_id, "last_answer_plan", response_plan)
-        memory.update_rolling_summary(session_id, stored_user_message, answer, response_plan, source_filenames)
+        memory.update_rolling_summary(
+            session_id,
+            stored_user_message,
+            answer,
+            response_plan,
+            source_filenames,
+            effect_key=_effect_key(user_metadata, "rolling_summary"),
+        )
 
         yield sse({"type": "run_done", "session_id": session_id, "intent": route_intent(route, INTENT_KNOWLEDGE_QA)})
         yield sse({
@@ -553,6 +614,7 @@ class RagQaStreamService:
         session_id: str,
         user_id: str,
         user_info=None,
+        user_metadata=None,
     ):
         prompt = build_llm_planner_prompt(message, conversation_context, fallback_plan)
         planner_start = time.time()
@@ -582,6 +644,7 @@ class RagQaStreamService:
                 completion_chars=len(text),
                 duration_ms=int((time.time() - planner_start) * 1000),
                 status="success",
+                effect_key=_effect_key(user_metadata, "token_usage_answer_planner"),
             )
             return plan
         except Exception as exc:
@@ -597,5 +660,6 @@ class RagQaStreamService:
                 duration_ms=int((time.time() - planner_start) * 1000),
                 status="failed",
                 error_message=str(exc)[:300],
+                effect_key=_effect_key(user_metadata, "token_usage_answer_planner"),
             )
             return fallback_plan

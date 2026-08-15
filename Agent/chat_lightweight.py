@@ -15,6 +15,22 @@ from chat_architecture import (
 from chat_events import route_actions, route_event, route_intent, route_payload, route_template_key, sse, text_stream_sse
 
 
+def _message_metadata(metadata: Any, node: str, effect: str, **values: Any) -> dict:
+    result = dict(metadata or {}) if isinstance(metadata, dict) else {}
+    result.pop("effect_key", None)
+    result.update(values)
+    run_id = str(result.get("run_id") or "").strip()
+    if run_id:
+        scope = str(result.get("effect_scope") or "").strip()
+        scoped_node = f"{node}:{scope}" if scope else node
+        result["effect_key"] = f"{run_id}:{scoped_node}:{effect}"
+    return result
+
+
+def _effect_key(metadata: Any, node: str, effect: str) -> str | None:
+    return _message_metadata(metadata, node, effect).get("effect_key")
+
+
 def assistant_identity_response() -> str:
     return """我是智能知识库助手，面向智能知识库平台的智能知识库平台提供服务。
 
@@ -53,7 +69,7 @@ class LightweightChatStreamService:
         intent = route_intent(route, "")
         display = display_message or message
         if intent == INTENT_IDENTITY_HELP:
-            yield from self._identity(display, session_id, route)
+            yield from self._identity(display, session_id, route, user_metadata)
         elif intent == INTENT_CLARIFY:
             yield from self._clarify(display, session_id, route, user_metadata)
         elif intent == INTENT_FORM_TEMPLATE_EXPORT:
@@ -63,7 +79,7 @@ class LightweightChatStreamService:
         else:
             yield sse({"type": "error", "message": "暂不支持的轻量意图"})
 
-    def _identity(self, message, session_id, route=None):
+    def _identity(self, message, session_id, route=None, user_metadata=None):
         response = self.deps.assistant_identity_response()
         plan = {
             "document_type": "身份说明",
@@ -71,7 +87,16 @@ class LightweightChatStreamService:
             "need_web_search": False,
         }
 
-        self.deps.memory.add_message(session_id, "user", message)
+        self.deps.memory.add_message(
+            session_id,
+            "user",
+            message,
+            metadata=_message_metadata(
+                user_metadata,
+                "tool_identity_help",
+                "message_user",
+            ),
+        )
         yield sse({"type": "start"})
         yield sse({"type": "session", "session_id": session_id})
         if route:
@@ -82,11 +107,31 @@ class LightweightChatStreamService:
         yield from text_stream_sse(response, session_id=session_id)
         yield sse({"type": "answer_done", "answer": response, "session_id": session_id})
 
-        self.deps.memory.add_message(session_id, "assistant", response, metadata={"type": "identity", "plan": plan})
+        self.deps.memory.add_message(
+            session_id,
+            "assistant",
+            response,
+            metadata=_message_metadata(
+                user_metadata,
+                "tool_identity_help",
+                "message_assistant",
+                type="identity",
+                plan=plan,
+            ),
+        )
         self.deps.memory.set_context(session_id, "last_request", message)
         self.deps.memory.set_context(session_id, "last_answer", response)
         self.deps.memory.set_context(session_id, "last_answer_plan", plan)
-        self.deps.memory.update_rolling_summary(session_id, message, response, plan, [])
+        self.deps.memory.update_rolling_summary(
+            session_id,
+            message,
+            response,
+            plan,
+            [],
+            effect_key=_effect_key(
+                user_metadata, "tool_identity_help", "rolling_summary"
+            ),
+        )
 
         yield sse({"type": "run_done", "session_id": session_id, "intent": route_intent(route, INTENT_IDENTITY_HELP)})
         yield sse({
@@ -121,7 +166,12 @@ class LightweightChatStreamService:
             "need_web_search": False,
         }
 
-        self.deps.memory.add_message(session_id, "user", message, metadata=user_metadata or {})
+        self.deps.memory.add_message(
+            session_id,
+            "user",
+            message,
+            metadata=_message_metadata(user_metadata, "tool_clarify", "message_user"),
+        )
         yield sse({"type": "start"})
         yield sse({"type": "session", "session_id": session_id})
         if route:
@@ -133,15 +183,32 @@ class LightweightChatStreamService:
         yield from text_stream_sse(response, session_id=session_id)
         yield sse({"type": "answer_done", "answer": response, "session_id": session_id})
 
-        self.deps.memory.add_message(session_id, "assistant", response, metadata={
-            "type": INTENT_CLARIFY,
-            "plan": plan,
-            "route": payload,
-        })
+        self.deps.memory.add_message(
+            session_id,
+            "assistant",
+            response,
+            metadata=_message_metadata(
+                user_metadata,
+                "tool_clarify",
+                "message_assistant",
+                type=INTENT_CLARIFY,
+                plan=plan,
+                route=payload,
+            ),
+        )
         self.deps.memory.set_context(session_id, "last_request", message)
         self.deps.memory.set_context(session_id, "last_answer", response)
         self.deps.memory.set_context(session_id, "last_answer_plan", plan)
-        self.deps.memory.update_rolling_summary(session_id, message, response, plan, [])
+        self.deps.memory.update_rolling_summary(
+            session_id,
+            message,
+            response,
+            plan,
+            [],
+            effect_key=_effect_key(
+                user_metadata, "tool_clarify", "rolling_summary"
+            ),
+        )
 
         yield sse({"type": "run_done", "session_id": session_id, "intent": INTENT_CLARIFY})
         yield sse({
@@ -171,7 +238,16 @@ class LightweightChatStreamService:
             "need_web_search": False,
         }
 
-        self.deps.memory.add_message(session_id, "user", message, metadata=user_metadata or {})
+        self.deps.memory.add_message(
+            session_id,
+            "user",
+            message,
+            metadata=_message_metadata(
+                user_metadata,
+                "tool_prepare_form_export",
+                "message_user",
+            ),
+        )
         yield sse({"type": "start"})
         yield sse({"type": "session", "session_id": session_id})
         yield route_event(route)
@@ -184,17 +260,34 @@ class LightweightChatStreamService:
 
         source_filenames = [filename]
         source_details = [{"filename": filename}]
-        self.deps.memory.add_message(session_id, "assistant", response, metadata={
-            "type": INTENT_FORM_TEMPLATE_EXPORT,
-            "plan": plan,
-            "route": route_payload(route),
-            "actions": route_actions(route),
-            "source_filenames": source_filenames,
-        })
+        self.deps.memory.add_message(
+            session_id,
+            "assistant",
+            response,
+            metadata=_message_metadata(
+                user_metadata,
+                "tool_prepare_form_export",
+                "message_assistant",
+                type=INTENT_FORM_TEMPLATE_EXPORT,
+                plan=plan,
+                route=route_payload(route),
+                actions=route_actions(route),
+                source_filenames=source_filenames,
+            ),
+        )
         self.deps.memory.set_context(session_id, "last_request", message)
         self.deps.memory.set_context(session_id, "last_answer", response)
         self.deps.memory.set_context(session_id, "last_answer_plan", plan)
-        self.deps.memory.update_rolling_summary(session_id, message, response, plan, source_filenames)
+        self.deps.memory.update_rolling_summary(
+            session_id,
+            message,
+            response,
+            plan,
+            source_filenames,
+            effect_key=_effect_key(
+                user_metadata, "tool_prepare_form_export", "rolling_summary"
+            ),
+        )
 
         yield sse({"type": "run_done", "session_id": session_id, "intent": INTENT_FORM_TEMPLATE_EXPORT})
         yield sse({
@@ -223,7 +316,16 @@ class LightweightChatStreamService:
             "need_web_search": False,
         }
 
-        self.deps.memory.add_message(session_id, "user", message, metadata=user_metadata or {})
+        self.deps.memory.add_message(
+            session_id,
+            "user",
+            message,
+            metadata=_message_metadata(
+                user_metadata,
+                "tool_prepare_spreadsheet_transform",
+                "message_user",
+            ),
+        )
         yield sse({"type": "start"})
         yield sse({"type": "session", "session_id": session_id})
         yield route_event(route)
@@ -234,16 +336,35 @@ class LightweightChatStreamService:
         yield from text_stream_sse(response, session_id=session_id)
         yield sse({"type": "answer_done", "answer": response, "session_id": session_id})
 
-        self.deps.memory.add_message(session_id, "assistant", response, metadata={
-            "type": INTENT_SPREADSHEET_TRANSFORM,
-            "plan": plan,
-            "route": route_payload(route),
-            "actions": actions,
-        })
+        self.deps.memory.add_message(
+            session_id,
+            "assistant",
+            response,
+            metadata=_message_metadata(
+                user_metadata,
+                "tool_prepare_spreadsheet_transform",
+                "message_assistant",
+                type=INTENT_SPREADSHEET_TRANSFORM,
+                plan=plan,
+                route=route_payload(route),
+                actions=actions,
+            ),
+        )
         self.deps.memory.set_context(session_id, "last_request", message)
         self.deps.memory.set_context(session_id, "last_answer", response)
         self.deps.memory.set_context(session_id, "last_answer_plan", plan)
-        self.deps.memory.update_rolling_summary(session_id, message, response, plan, [])
+        self.deps.memory.update_rolling_summary(
+            session_id,
+            message,
+            response,
+            plan,
+            [],
+            effect_key=_effect_key(
+                user_metadata,
+                "tool_prepare_spreadsheet_transform",
+                "rolling_summary",
+            ),
+        )
 
         yield sse({"type": "run_done", "session_id": session_id, "intent": INTENT_SPREADSHEET_TRANSFORM})
         yield sse({

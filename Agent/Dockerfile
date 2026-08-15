@@ -12,4 +12,6 @@ COPY . .
 
 EXPOSE 5003
 
-CMD ["gunicorn", "-w", "4", "--worker-class", "gthread", "--threads", "8", "--timeout", "120", "-b", "0.0.0.0:5003", "app:app"]
+# The launcher keeps the development SQLite saver single-process and only
+# enables the production four-worker default after PostgreSQL validation.
+CMD ["python", "scripts/start_server.py"]

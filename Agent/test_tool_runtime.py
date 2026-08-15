@@ -134,3 +134,65 @@ def test_tool_orchestrator_uses_last_tool_done_for_multi_step_task():
     ]
     assert events[-1]["intent"] == "doc_drafting"
     assert events[-1]["document"] == "最终文档"
+
+
+def test_tool_orchestrator_stops_after_tool_error_without_done():
+    def failing_stream(*_args):
+        yield sse({"type": "start"})
+        yield sse({"type": "error", "message": "writer unavailable"})
+        yield sse({"type": "done", "answer": "must not escape"})
+
+    registry = ToolRegistry()
+    registry.register(ChatTool(
+        name=TOOL_DRAFT_DOCUMENT,
+        description="写作",
+        risk_level="low",
+        input_schema={},
+        stream=failing_stream,
+    ))
+    plan = TaskPlan(
+        task_type="写作",
+        steps=[TaskStep(tool=TOOL_DRAFT_DOCUMENT, reason="生成正文")],
+    )
+
+    events = parse_sse(ToolOrchestrator(registry).stream(prepared(), plan))
+
+    assert events[-1] == {"type": "error", "message": "writer unavailable"}
+    assert "done" not in [event["type"] for event in events]
+    assert "run_done" not in [event["type"] for event in events]
+
+
+def test_repeated_tool_steps_receive_distinct_effect_scopes():
+    seen_metadata = []
+
+    def scoped_stream(
+        _message,
+        _session_id,
+        _user_id,
+        _user_info,
+        _display_message,
+        user_metadata,
+        _route,
+    ):
+        seen_metadata.append(dict(user_metadata or {}))
+        yield sse({"type": "done", "intent": "knowledge_qa", "answer": "ok"})
+
+    registry = ToolRegistry()
+    registry.register(ChatTool(
+        name=TOOL_KNOWLEDGE_QA,
+        description="知识问答",
+        risk_level="low",
+        input_schema={},
+        stream=scoped_stream,
+    ))
+    request = prepared()
+    request.user_metadata = {"run_id": "run-repeat"}
+    plan = TaskPlan(task_type="复合", steps=[
+        TaskStep(tool=TOOL_KNOWLEDGE_QA, reason="第一次"),
+        TaskStep(tool=TOOL_KNOWLEDGE_QA, reason="第二次"),
+    ])
+
+    events = parse_sse(ToolOrchestrator(registry).stream(request, plan))
+
+    assert events[-1]["type"] == "done"
+    assert [item["effect_scope"] for item in seen_metadata] == ["step:1", "step:2"]

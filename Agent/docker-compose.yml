@@ -3,8 +3,13 @@ services:
     build: .
     container_name: agent_app
     working_dir: /app
+    # start_server derives one worker for development/SQLite and four for
+    # production/PostgreSQL.  An explicit WEB_CONCURRENCY>1 with a local
+    # ledger is rejected before Flask imports.
+    command: python scripts/start_server.py
+    init: true
     ports:
-      - "${PORT:-5003}:5003"
+      - "${PUBLIC_PORT:-5003}:5003"
     volumes:
       - .:/app
       - app_data:/app/data

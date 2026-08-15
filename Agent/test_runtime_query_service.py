@@ -106,6 +106,22 @@ def test_health_and_knowledge_health_payloads():
     assert manifest.consistency_calls == [(kb, "sheets.sqlite")]
 
 
+def test_health_includes_optional_langgraph_runtime_details():
+    service = build_service()
+    service.deps.graph_health = lambda: {
+        "ok": True,
+        "effective_runtime": "langgraph",
+        "checkpointer_backend": "sqlite",
+        "workflow_version": "chat-v1",
+    }
+
+    health = service.health()
+
+    assert health["langgraph"]["ok"] is True
+    assert health["langgraph"]["effective_runtime"] == "langgraph"
+    assert health["langgraph"]["checkpointer_backend"] == "sqlite"
+
+
 def test_spreadsheet_query_applies_access_filter_and_clamps_limit():
     store = FakeSpreadsheetStore()
     service = build_service(spreadsheet_store=store)

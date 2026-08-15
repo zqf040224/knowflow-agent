@@ -1,0 +1,41 @@
+# Disposable real-PostgreSQL acceptance test; no external DSN is required.
+#
+# Run:
+#   docker compose -f docker-compose.langgraph-test.yml up --build \
+#     --abort-on-container-exit --exit-code-from pg-test
+#   docker compose -f docker-compose.langgraph-test.yml down -v
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: langgraph_test
+      POSTGRES_USER: langgraph_test
+      POSTGRES_PASSWORD: langgraph_test_only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langgraph_test -d langgraph_test"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    tmpfs:
+      - /var/lib/postgresql/data
+
+  pg-test:
+    build:
+      context: .
+      # The production-topology crash matrix imports the real chat/document
+      # graphs, so this gate deliberately uses the application image rather
+      # than the former persistence-only test image.
+      dockerfile: Dockerfile.langgraph-test
+    working_dir: /app
+    command: >-
+      python -m pytest -q
+      test_graph_persistence_postgres_live.py
+      test_chat_postgres_recovery_live.py
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPYCACHEPREFIX: /tmp/pycache
+      LANGGRAPH_TEST_POSTGRES_DSN: >-
+        postgresql://langgraph_test:langgraph_test_only@postgres:5432/langgraph_test
+    depends_on:
+      postgres:
+        condition: service_healthy
