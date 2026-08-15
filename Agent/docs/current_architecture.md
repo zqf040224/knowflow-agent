@@ -22,14 +22,30 @@
 ```text
 POST /api/chat
   -> routes/chat_routes.py: chat()
-  -> context.chat_runtime().stream(...)
+  -> context.chat_runtime().stream_http(...)
   -> ChatGraphRuntime
-  -> TaskPlanner
-  -> ToolOrchestrator
-  -> ToolRegistry 中的工具
+  -> prepare -> plan_tools -> select_step
+  -> tool-specific node -> collect_result
+  -> select_step / finalize / error_terminal
 ```
 
-`ChatGraphRuntime` 负责请求准备、附件内容拼接、会话获取、任务规划和工具编排。`TaskPlanner` 是默认决策入口，输出工具步骤；`ToolOrchestrator` 执行工具并统一 SSE 事件。`IntentRouter` 保留为规则 fallback 和 `CHAT_RUNTIME=legacy` 旧链路，不再是默认主决策层。
+HTTP 路径在创建 SSE Response 前同步预占运行身份，幂等 payload 冲突因此能
+稳定返回 409。普通 `stream()` 仍保留惰性语义供内部调用与测试使用。
+
+`ChatGraphRuntime` 是默认生产 `StateGraph`，负责请求准备、任务规划、
+逐步工具执行与恢复。`TaskPlanner` 仅生成可序列化计划；Agent、认证对象、
+数据库连接和回调通过 `Runtime.context` 注入，不进入 checkpoint。附件正文按
+`run_id` 快照到 `STORAGE_ROOT/graph_runs/<run_id>`，State 只保留受控引用，
+节点执行时才水合。
+
+运行模式严格分为：
+
+- `langgraph/graph/on/true/1`：默认生产主图。
+- `planner/task_planner/off/false/0`：保留一个发布周期的 Planner 回滚链路。
+- `legacy/pipeline`：旧 `IntentRouter` 回滚链路。
+
+未知值、或明确请求 LangGraph 但依赖/持久化不可用时，应启动失败，
+不允许静默降级。`IntentRouter` 只存在于明确的 legacy 模式。
 
 当前工具映射：
 
@@ -84,15 +100,25 @@ tool_result/tool_confirm_required? -> run_done -> done
 
 ## Agent 内层链路
 
-`AgentOrchestrator` 是复杂公文/材料生成的内层编排器。它只在 `doc_drafting` 以及 legacy `/api/agent/generate` 中使用。
+`AgentOrchestrator` 是复杂公文/材料生成的运行时服务。`draft_document`
+在父图中挂载真实文档子图：
 
-当前内层可走：
+```text
+context_plan -> retrieval -> write -> review
+                               ^         |
+                               |         v
+                               +-- decide <- reflection?
+                                      |
+                               write / finalize / fail
+```
 
-- `DocumentStreamRunner`：聊天流式生成主路径。
-- `DocumentLinearRunner`：非流式运行。
-- `DocumentGraphRunner`：`AGENT_ORCHESTRATOR=langgraph` 时启用的内部图运行器。
+流式与非流式共用这张图；流式仅额外消费 `custom` 事件。Writer
+失败或空正文、Reviewer 不可用都会 fail closed；最多一份初稿加两次修改，
+达到上限后返回 `quality_status=max_revisions`，不冒充“审核通过”。
+`reflection_done` 保存在 State 中，恢复后仍只执行一次。
 
-这些 runner 属于 Agent 内层实现，不是 `/api/chat` 的外层路由边界。
+`DocumentLinearRunner` 和 `DocumentStreamRunner` 仅作本发布周期回滚通道；
+稳定一个发布周期后再删除，不在首次上线同时移除。
 
 ## 知识库、上传、导出与任务
 
@@ -122,19 +148,20 @@ tool_result/tool_confirm_required? -> run_done -> done
 - `ROUTER_ARCHITECTURE.md`
 - `using.md` 中的早期 router 说明
 
-新功能不要接入 `IntelligentRouter`。如果需要改变生产聊天分派，请改 `IntentRouter + ChatGraphRuntime + stream service`。
+新功能不要接入 `IntelligentRouter`。如果需要改变生产聊天分派，请同步修改
+`TaskPlanner`、工具注册表、`ChatGraphRuntime` 图节点和对应 stream service。
 
 ## 测试策略
 
 主链路改动至少运行：
 
 ```bash
-.venv311/bin/python -m py_compile app.py app_dependencies.py routes/*.py chat_runtime.py chat_container.py chat_architecture.py
-.venv311/bin/python -m pytest test_chat_runtime.py test_chat_container.py test_chat_architecture.py test_app_route_service_wrappers.py
+.venv/bin/python -m py_compile app.py app_dependencies.py routes/*.py chat_runtime.py chat_container.py chat_architecture.py graph_persistence.py graph_artifacts.py graph_state_validation.py
+.venv/bin/python -m pytest test_chat_runtime.py test_chat_runtime_safety.py test_chat_persistence_integration.py test_chat_container.py test_chat_architecture.py test_app_route_service_wrappers.py
 ```
 
 涉及上传、导出、任务或知识库边界时，再运行：
 
 ```bash
-.venv311/bin/python -m pytest test_upload_service.py test_export_service.py test_runtime_query_service.py test_job_service.py
+.venv/bin/python -m pytest test_upload_service.py test_export_service.py test_runtime_query_service.py test_job_service.py
 ```

@@ -135,3 +135,108 @@ def test_token_usage_recording_and_dashboard():
     assert dashboard["summary"]["call_count"] == 2
     assert dashboard["summary"]["total_tokens"] > 0
     assert {row["agent"] for row in dashboard["by_agent"]} == {"Chat", "Writer"}
+
+
+def test_token_usage_effect_key_deduplicates_direct_and_agent_records():
+    service = build_service()
+    service.init_tables()
+
+    direct = {
+        "user_id": "u1",
+        "session_id": "s1",
+        "mode": "chat",
+        "agent": "Chat",
+        "model": "deepseek",
+        "prompt_chars": 10,
+        "effect_key": "run-1:tool_knowledge_qa:token_usage_chat",
+    }
+    service.record_token_usage(**direct)
+    service.record_token_usage(**direct)
+
+    run_records = [{
+        "step": "write",
+        "llm_usage": {
+            "agent": "Writer",
+            "model": "deepseek",
+            "prompt_chars": 10,
+            "completion_chars": 20,
+        },
+    }]
+    service.record_agent_run_token_usage(
+        run_records,
+        user_id="u1",
+        session_id="s1",
+        run_id="run-1",
+    )
+    service.record_agent_run_token_usage(
+        run_records,
+        user_id="u1",
+        session_id="s1",
+        run_id="run-1",
+    )
+    service.record_token_usage(user_id="u1", agent="unkeyed")
+    service.record_token_usage(user_id="u1", agent="unkeyed")
+
+    rows = service.deps.memory.conn.execute(
+        "SELECT effect_key, agent FROM beta_token_usage ORDER BY id"
+    ).fetchall()
+    assert [(row["effect_key"], row["agent"]) for row in rows] == [
+        ("run-1:tool_knowledge_qa:token_usage_chat", "Chat"),
+        ("run-1:tool_draft_document:token_usage_0_Writer", "Writer"),
+        (None, "unkeyed"),
+        (None, "unkeyed"),
+    ]
+
+
+def test_agent_token_usage_effect_keys_are_isolated_by_parent_step_scope():
+    service = build_service()
+    service.init_tables()
+    run_records = [{
+        "step": "write",
+        "llm_usage": {
+            "agent": "Writer",
+            "model": "deepseek",
+            "prompt_chars": 10,
+        },
+    }]
+
+    for effect_scope in ("step:1", "step:2", "step:2"):
+        service.record_agent_run_token_usage(
+            run_records,
+            user_id="u1",
+            session_id="s1",
+            run_id="run-parent",
+            effect_scope=effect_scope,
+        )
+
+    rows = service.deps.memory.conn.execute(
+        "SELECT effect_key FROM beta_token_usage ORDER BY id"
+    ).fetchall()
+    assert [row["effect_key"] for row in rows] == [
+        "run-parent:tool_draft_document:step:1:token_usage_0_Writer",
+        "run-parent:tool_draft_document:step:2:token_usage_0_Writer",
+    ]
+
+
+def test_token_usage_table_receives_forward_effect_key_migration():
+    service = build_service()
+    service.init_tables()
+    connection = service.deps.memory.conn
+    connection.execute("DROP INDEX idx_beta_token_usage_effect_key_unique")
+    connection.execute("ALTER TABLE beta_token_usage DROP COLUMN effect_key")
+    connection.commit()
+
+    service.init_tables()
+
+    columns = {
+        row["name"] for row in connection.execute(
+            "PRAGMA table_info(beta_token_usage)"
+        ).fetchall()
+    }
+    indexes = {
+        row["name"] for row in connection.execute(
+            "PRAGMA index_list(beta_token_usage)"
+        ).fetchall()
+    }
+    assert "effect_key" in columns
+    assert "idx_beta_token_usage_effect_key_unique" in indexes

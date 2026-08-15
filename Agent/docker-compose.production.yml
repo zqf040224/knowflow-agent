@@ -1,0 +1,95 @@
+# Production overlay for an externally managed PostgreSQL database.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.production.yml up --build
+#
+# ``.env`` must provide LANGGRAPH_POSTGRES_DSN.  The application is not
+# started until the one-shot migration service exits successfully.
+services:
+  app:
+    environment:
+      APP_ENV: production
+      LANGGRAPH_CHECKPOINTER_BACKEND: postgres
+      LANGGRAPH_RUN_LEDGER_BACKEND: postgres
+      STORAGE_ROOT: /app/storage
+      WEB_CONCURRENCY: "${WEB_CONCURRENCY:-4}"
+      # Four web workers plus the independent cleanup process must stay within
+      # the locked eight-connection deployment budget.
+      LANGGRAPH_POOL_MAX_SIZE: "1"
+    # Compose's !override tag replaces the complete base list, removing the
+    # development source bind mount. The legacy data volume is still needed by
+    # the local auth/memory database; uploads now live below STORAGE_ROOT, so a
+    # separate /app/uploads volume would be redundant and is intentionally gone.
+    volumes: !override
+      - app_data:/app/data
+      - app_storage:/app/storage
+    depends_on:
+      langgraph-migrate:
+        condition: service_completed_successfully
+
+  langgraph-migrate:
+    build: .
+    working_dir: /app
+    command: python scripts/setup_langgraph_checkpointer.py
+    env_file:
+      - .env
+    environment:
+      APP_ENV: production
+      LANGGRAPH_CHECKPOINTER_BACKEND: postgres
+      LANGGRAPH_RUN_LEDGER_BACKEND: postgres
+      # The migration is a one-shot process and must not consume a four-worker
+      # connection budget.
+      WEB_CONCURRENCY: "1"
+    restart: "no"
+
+  langgraph-cleanup:
+    build: .
+    working_dir: /app
+    init: true
+    command:
+      - python
+      - scripts/cleanup_langgraph_runs.py
+      - --loop
+      - --interval-seconds
+      - "${LANGGRAPH_CLEANUP_INTERVAL_SECONDS:-21600}"
+      - --retry-seconds
+      - "${LANGGRAPH_CLEANUP_RETRY_SECONDS:-60}"
+      - --max-consecutive-failures
+      - "${LANGGRAPH_CLEANUP_MAX_CONSECUTIVE_FAILURES:-3}"
+      - --health-file
+      - /tmp/langgraph-cleanup-health.json
+    env_file:
+      - .env
+    environment:
+      APP_ENV: production
+      LANGGRAPH_CHECKPOINTER_BACKEND: postgres
+      LANGGRAPH_RUN_LEDGER_BACKEND: postgres
+      LANGGRAPH_POOL_MIN_SIZE: "1"
+      LANGGRAPH_POOL_MAX_SIZE: "1"
+      STORAGE_ROOT: /app/storage
+      # One cleanup process opens exactly one maintenance connection pool slot
+      # during a sweep, then closes it before sleeping.
+      WEB_CONCURRENCY: "1"
+    volumes:
+      - app_storage:/app/storage
+    depends_on:
+      langgraph-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - scripts/cleanup_langgraph_runs.py
+        - --healthcheck
+        - --health-file
+        - /tmp/langgraph-cleanup-health.json
+        - --health-max-age-seconds
+        - "${LANGGRAPH_CLEANUP_HEALTH_MAX_AGE_SECONDS:-25200}"
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  app_storage:

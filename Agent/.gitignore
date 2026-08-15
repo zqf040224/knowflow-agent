@@ -26,6 +26,7 @@ knowledge_analysis.json
 # 上传文件
 uploads/*
 outputs/
+graph_runs/
 
 # macOS
 .DS_Store

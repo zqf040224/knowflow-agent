@@ -90,9 +90,13 @@ class DatabaseManager:
                     content TEXT,
                     timestamp REAL,
                     metadata TEXT DEFAULT '{}',
+                    effect_key TEXT,
                     FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
                 )
             ''')
+            # Forward-only migration for databases created before durable
+            # business-effect idempotency was introduced.
+            cursor.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS effect_key TEXT')
             
             # 创建会话上下文表
             cursor.execute('''
@@ -105,6 +109,16 @@ class DatabaseManager:
                     updated_at TEXT,
                     FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE,
                     UNIQUE(session_id, context_key)
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS memory_effects (
+                    effect_key TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    effect_type TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
                 )
             ''')
 
@@ -132,10 +146,16 @@ class DatabaseManager:
             # 创建索引
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_messages_session_timestamp ON messages(session_id, timestamp DESC)')
+            cursor.execute('''
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_effect_key_unique
+                ON messages(effect_key)
+                WHERE effect_key IS NOT NULL AND effect_key <> ''
+            ''')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_sessions_active ON sessions(is_active)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_sessions_user_active_updated ON sessions(user_id, is_active, updated_at DESC)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_context_session ON session_context(session_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_memory_effects_session ON memory_effects(session_id, created_at)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_memory_user_active_updated ON memory_items(user_id, is_active, updated_at DESC)')
             cursor.execute('''
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_active_key
@@ -188,9 +208,22 @@ class DatabaseManager:
                     content TEXT,
                     timestamp REAL,
                     metadata TEXT DEFAULT '{}',
+                    effect_key TEXT,
                     FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
                 )
             ''')
+            message_columns = {
+                row['name']
+                for row in cursor.execute('PRAGMA table_info(messages)').fetchall()
+            }
+            if 'effect_key' not in message_columns:
+                try:
+                    cursor.execute('ALTER TABLE messages ADD COLUMN effect_key TEXT')
+                except sqlite3.OperationalError as exc:
+                    # Multiple workers can initialize the same legacy DB at
+                    # once; the other migration winner has already completed.
+                    if 'duplicate column name' not in str(exc).lower():
+                        raise
             
             # 创建会话上下文表
             cursor.execute('''
@@ -203,6 +236,16 @@ class DatabaseManager:
                     updated_at TEXT,
                     FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE,
                     UNIQUE(session_id, context_key)
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS memory_effects (
+                    effect_key TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    effect_type TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
                 )
             ''')
 
@@ -228,10 +271,16 @@ class DatabaseManager:
             # 创建索引
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_messages_session_timestamp ON messages(session_id, timestamp DESC)')
+            cursor.execute('''
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_effect_key_unique
+                ON messages(effect_key)
+                WHERE effect_key IS NOT NULL AND effect_key <> ''
+            ''')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_sessions_active ON sessions(is_active)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_sessions_user_active_updated ON sessions(user_id, is_active, updated_at DESC)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_context_session ON session_context(session_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_memory_effects_session ON memory_effects(session_id, created_at)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_memory_user_active_updated ON memory_items(user_id, is_active, updated_at DESC)')
             cursor.execute('''
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_active_key

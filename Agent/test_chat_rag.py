@@ -16,7 +16,13 @@ from chat_answer_quality import (
     verify_answer,
 )
 from chat_events import source_details_from_results
-from chat_rag import RagQaDependencies, RagQaStreamService, build_storage_server_answer, chat_context_for_model
+from chat_rag import (
+    RagQaDependencies,
+    RagQaStreamService,
+    _effect_key,
+    build_storage_server_answer,
+    chat_context_for_model,
+)
 
 
 class FakeMemory:
@@ -38,8 +44,19 @@ class FakeMemory:
     def set_context(self, session_id, key, value):
         self.context[(session_id, key)] = value
 
-    def update_rolling_summary(self, session_id, message, response, plan, sources):
-        self.summaries.append((session_id, message, response, plan, sources))
+    def update_rolling_summary(
+        self, session_id, message, response, plan, sources, *, effect_key=None
+    ):
+        self.summaries.append(
+            (session_id, message, response, plan, sources, effect_key)
+        )
+
+
+def test_rag_effect_key_supports_repeated_step_scope():
+    assert _effect_key(
+        {"run_id": "run-rag", "effect_scope": "step:4"},
+        "message_assistant",
+    ) == "run-rag:tool_knowledge_qa:step:4:message_assistant"
 
 
 class FakeKnowledgeAgent:
@@ -344,6 +361,7 @@ def test_rag_stream_answers_storage_server_address_without_model(monkeypatch):
         "session_1",
         "user_1",
         display_message="网盘地址是什么",
+        user_metadata={"run_id": "run-rag", "request_id": "request-1"},
     ))
 
     done = events[-1]
@@ -357,6 +375,10 @@ def test_rag_stream_answers_storage_server_address_without_model(monkeypatch):
         "示例单位存储服务器运营方案 NAS服务器 网盘 私有云 存储服务器 访问方式 访问地址 账号 密码 Windows+R 快捷方式"
     )
     assert usage_calls[-1]["model"] == "none"
+    assert usage_calls[-1]["effect_key"] == "run-rag:tool_knowledge_qa:token_usage_chat"
+    assert memory.messages[0][3]["effect_key"] == "run-rag:tool_knowledge_qa:message_user"
+    assert memory.messages[1][3]["effect_key"] == "run-rag:tool_knowledge_qa:message_assistant"
+    assert memory.summaries[0][-1] == "run-rag:tool_knowledge_qa:rolling_summary"
 
 
 def test_rag_stream_returns_evidence_fallback_without_model_when_no_results(monkeypatch):

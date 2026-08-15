@@ -258,6 +258,28 @@ class RouteResult:
             "actions": self.actions,
         }
 
+    @classmethod
+    def from_dict(cls, payload: Optional[Dict[str, Any]]) -> "RouteResult":
+        """Rebuild a route from graph-safe serialized state."""
+        if isinstance(payload, cls):
+            return payload
+        data = payload if isinstance(payload, dict) else {}
+        try:
+            confidence = float(data.get("confidence", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            confidence = 0.0
+        raw_actions = data.get("actions") or []
+        actions = [dict(item) for item in raw_actions if isinstance(item, dict)]
+        return cls(
+            intent=str(data.get("intent") or INTENT_KNOWLEDGE_QA),
+            confidence=confidence,
+            reason=str(data.get("reason") or ""),
+            document_type=str(data.get("document_type") or ""),
+            template_key=str(data.get("template_key") or ""),
+            requires_retrieval=bool(data.get("requires_retrieval", True)),
+            actions=actions,
+        )
+
 
 class IntentRouter:
     def __init__(

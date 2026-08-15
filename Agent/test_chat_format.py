@@ -2,7 +2,11 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from chat_format import DocumentFormatDependencies, DocumentFormatStreamService
+from chat_format import (
+    DocumentFormatDependencies,
+    DocumentFormatStreamService,
+    _effect_key,
+)
 
 
 class FakeMemory:
@@ -17,8 +21,19 @@ class FakeMemory:
     def set_context(self, session_id, key, value):
         self.context[(session_id, key)] = value
 
-    def update_rolling_summary(self, session_id, message, response, plan, sources):
-        self.summaries.append((session_id, message, response, plan, sources))
+    def update_rolling_summary(
+        self, session_id, message, response, plan, sources, *, effect_key=None
+    ):
+        self.summaries.append(
+            (session_id, message, response, plan, sources, effect_key)
+        )
+
+
+def test_document_format_effect_key_supports_repeated_step_scope():
+    assert _effect_key(
+        {"run_id": "run-format", "effect_scope": "step:3"},
+        "message_user",
+    ) == "run-format:tool_format_document:step:3:message_user"
 
 
 class FakeKnowledgeAgent:
@@ -92,6 +107,7 @@ def test_document_format_stream_success_contract():
         "user_1",
         user_info=SimpleNamespace(to_dict=lambda: {"user_id": "user_1"}),
         display_message="请改为公文格式",
+        user_metadata={"run_id": "run-format", "request_id": "request-1"},
         route=SimpleNamespace(to_dict=lambda: {"intent": "doc_formatting", "actions": []}),
     ))
 
@@ -112,6 +128,10 @@ def test_document_format_stream_success_contract():
     assert memory.context[("session_1", "last_document")] == "第一段第二段"
     assert usage_calls[0]["status"] == "success"
     assert usage_calls[0]["mode"] == "document"
+    assert usage_calls[0]["effect_key"] == "run-format:tool_format_document:token_usage_writer"
+    assert memory.messages[0][3]["effect_key"] == "run-format:tool_format_document:message_user"
+    assert memory.messages[1][3]["effect_key"] == "run-format:tool_format_document:message_assistant"
+    assert memory.summaries[0][-1] == "run-format:tool_format_document:rolling_summary"
 
 
 def test_document_format_stream_records_failure():

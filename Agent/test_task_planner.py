@@ -1,10 +1,13 @@
+from chat_architecture import RouteResult
 from task_planner import (
     TOOL_DRAFT_DOCUMENT,
     TOOL_FORMAT_DOCUMENT,
     TOOL_KNOWLEDGE_QA,
     TOOL_PREPARE_FORM_EXPORT,
     TOOL_PREPARE_SPREADSHEET_TRANSFORM,
+    TaskPlan,
     TaskPlanner,
+    TaskStep,
 )
 
 
@@ -94,3 +97,38 @@ def test_task_planner_accepts_classifier_plan():
 
     assert plan.source == "llm"
     assert tool_names(plan) == [TOOL_KNOWLEDGE_QA, TOOL_DRAFT_DOCUMENT]
+
+
+def test_task_plan_dict_round_trip_preserves_route_and_steps():
+    plan = TaskPlan(
+        task_type="复合任务",
+        steps=[
+            TaskStep(
+                tool=TOOL_KNOWLEDGE_QA,
+                reason="先查依据",
+                input={"message": "查询制度"},
+            ),
+            TaskStep(
+                tool=TOOL_DRAFT_DOCUMENT,
+                reason="再起草",
+                risk_level="confirm",
+                requires_confirmation=True,
+            ),
+        ],
+        requires_confirmation=True,
+        final_response_mode="confirm_actions",
+        source="llm",
+        route=RouteResult(
+            intent="doc_drafting",
+            confidence=0.92,
+            reason="需要检索后起草",
+            document_type="通知",
+            actions=[{"type": "export_docx", "filename": "通知.docx"}],
+        ),
+    )
+
+    restored = TaskPlan.from_dict(plan.to_dict())
+
+    assert restored.to_dict() == plan.to_dict()
+    assert isinstance(restored.steps[0], TaskStep)
+    assert isinstance(restored.route, RouteResult)

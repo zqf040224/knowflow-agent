@@ -1,0 +1,23 @@
+# Disposable acceptance image for the real chat/document LangGraph topology.
+# Keep heavyweight embedding and model runtimes out of this infrastructure
+# gate: the tests use deterministic service doubles at the Runtime-context
+# boundary while executing the production graph and Postgres saver code.
+FROM python:3.11-slim
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+RUN pip install --no-cache-dir \
+    'pytest>=9.0.3,<10' \
+    'langgraph==1.2.4' \
+    'langgraph-checkpoint==4.1.1' \
+    'langgraph-checkpoint-sqlite==3.1.0' \
+    'langgraph-checkpoint-postgres==3.1.2' \
+    'psycopg[binary]>=3.2,<4' \
+    'psycopg-pool>=3.2,<4'
+
+COPY . .
+
+CMD ["python", "-m", "pytest", "-q", "test_graph_persistence_postgres_live.py", "test_chat_postgres_recovery_live.py"]

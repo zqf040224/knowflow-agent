@@ -67,9 +67,10 @@ class DocumentStreamRunner:
             need_web_search=bool(need_search),
         )
 
-        self.orchestrator._reflection_done = False
         doc_content = ""
-        best_doc_content = ""
+        reflection_done = False
+        quality_status = "pending"
+        revisions_applied = 0
 
         for revision_round in range(self.orchestrator.MAX_TOTAL_ROUNDS):
             yield think_yield("Writer", "📝", f"正在生成{ctx.plan.get('document_type', '公文')}草稿...")
@@ -106,21 +107,22 @@ class DocumentStreamRunner:
                     "write",
                     step_start,
                     round=revision_round + 1,
-                    recovered=bool(best_doc_content),
+                    recovered=False,
                     error=str(exc),
                 )
-                if best_doc_content:
-                    doc_content = best_doc_content
-                    yield think_yield(
-                        "Writer",
-                        "⚠️",
-                        "修订生成连接中断，已保留上一版可用结果继续输出",
-                    )
-                    break
                 raise
 
             doc_content = self._sanitize_unsupported_specifics(draft_content, ctx.user_request)
-            best_doc_content = doc_content or best_doc_content
+            if not str(doc_content or "").strip():
+                self.orchestrator._record_step(
+                    ctx,
+                    "write",
+                    step_start,
+                    round=revision_round + 1,
+                    success=False,
+                    error="Writer returned empty document content",
+                )
+                raise RuntimeError("Writer returned empty document content")
             self.orchestrator._record_step(ctx, "write", step_start, round=revision_round + 1)
 
             step_start = time.time()
@@ -128,7 +130,16 @@ class DocumentStreamRunner:
                 lambda cb: self.orchestrator._step_review(ctx, doc_content, cb),
                 on_think=on_think,
             )
-            review_meta = review_result.metadata
+            validator = getattr(self.orchestrator, "_validated_review_metadata", None)
+            if callable(validator):
+                review_meta = validator(review_result)
+            else:
+                if not getattr(review_result, "success", True):
+                    error_info = getattr(review_result, "error_info", {}) or {}
+                    raise RuntimeError(error_info.get("error") or "Reviewer returned an unsuccessful result")
+                review_meta = review_result.metadata
+                if not review_meta:
+                    raise RuntimeError("Reviewer returned no review metadata")
             ctx.audit_summary = review_meta.get("spreadsheet_audit", {}) or {}
             self.orchestrator._record_step(
                 ctx,
@@ -144,9 +155,10 @@ class DocumentStreamRunner:
 
             reflection_meta = {}
             if (
-                not self.orchestrator._reflection_done
+                not reflection_done
                 and self.orchestrator._should_reflect(ctx, review_meta, revision_round)
             ):
+                reflection_done = True
                 reflection_meta = yield from self._run_reflection_stream(
                     ctx,
                     doc_content,
@@ -163,17 +175,52 @@ class DocumentStreamRunner:
             if needs_revision:
                 if is_last_round:
                     yield think_yield("Orchestrator", "⚠️", "已达最大修订轮次，输出当前最优版本")
+                    quality_status = "max_revisions"
+                    revisions_applied = revision_round
+                    break
                 else:
                     focus = self.orchestrator._combined_revision_focus(review_meta, reflection_meta)
                     yield think_yield("Orchestrator", "🔄",
                                       f"第{revision_round + 1}轮已汇总审核意见，重点：{'；'.join(focus[:3])}")
+                    revisions_applied = revision_round + 1
                     continue
 
             yield think_yield("Reviewer", "✅", "审核通过，无需修改")
+            quality_status = "passed"
+            revisions_applied = revision_round
             break
 
+        stored_user_message = getattr(
+            prepared_run,
+            "persisted_user_message",
+            None,
+        )
+        persisted_user_message = str(
+            user_request if stored_user_message is None else stored_user_message
+        )
+        effect_scope = str(getattr(prepared_run, "effect_scope", "") or "")
+        # Persist all fallible business writes before exposing answer_start or
+        # answer_done. DocumentDraftStreamService adds the usage/profile commit
+        # gate around this runner before releasing the buffered public answer.
+        self._save_stream_result(
+            ctx,
+            doc_content,
+            persisted_user_message,
+            quality_status=quality_status,
+            run_id=getattr(prepared_run, "run_id", ""),
+            effect_run_id=getattr(
+                self.orchestrator, "_current_effect_run_id", ""
+            ),
+            effect_scope=effect_scope,
+        )
+
         if doc_content:
-            yield think_yield("Orchestrator", "📄", "最终版本已确认，正在输出正文")
+            final_message = (
+                "当前最优版本已确认，正在输出正文"
+                if quality_status == "max_revisions"
+                else "最终版本已确认，正在输出正文"
+            )
+            yield think_yield("Orchestrator", "📄", final_message)
             yield {"type": "thinking_done", "summary": "写作、审核和反思完成，开始输出最终正文"}
             yield {"type": "answer_start", "message": "开始输出正文"}
             for chunk in self._iter_final_content_chunks(doc_content):
@@ -181,8 +228,6 @@ class DocumentStreamRunner:
                 yield {"type": "content", "data": chunk}
                 time.sleep(0.04)
             yield {"type": "answer_done", "answer": doc_content}
-
-        self._save_stream_result(ctx, doc_content, user_request)
 
         yield think_yield("Orchestrator", "✅", f"文档生成完成，共{len(self.orchestrator.think_log)}个思考步骤")
         yield {
@@ -194,10 +239,12 @@ class DocumentStreamRunner:
             "source_filenames": self.orchestrator._source_filenames(ctx),
             "source_details": self.orchestrator._source_details(ctx),
             "audit_summary": ctx.audit_summary,
+            "quality_status": quality_status,
+            "revision_rounds": revisions_applied,
+            "run_id": getattr(prepared_run, "run_id", ""),
         }
 
     def _run_reflection_stream(self, ctx: Any, doc_content: str, revision_round: int, think_yield):
-        self.orchestrator._reflection_done = True
         step_start = time.time()
         reflection_result = None
         for event in self.orchestrator.reflection.process_stream({
@@ -299,23 +346,42 @@ class DocumentStreamRunner:
             raise result_holder["error"]
         return result_holder.get("result")
 
-    def _save_stream_result(self, ctx: Any, doc_content: str, user_request: str) -> None:
+    def _save_stream_result(
+        self,
+        ctx: Any,
+        doc_content: str,
+        user_request: str,
+        *,
+        quality_status: str,
+        run_id: str,
+        effect_run_id: str,
+        effect_scope: str = "",
+    ) -> None:
         if not self.orchestrator.memory or not self.orchestrator.session_id:
             return
 
         source_filenames = self.orchestrator._source_filenames(ctx)
+        message_metadata = {
+            "type": "document",
+            "plan": ctx.plan,
+            "run_records": ctx.run_records,
+            "run_id": run_id,
+            "quality_status": quality_status,
+            "source_filenames": source_filenames,
+            "source_details": self.orchestrator._source_details(ctx),
+            "context_snapshot": self.orchestrator._context_snapshot(ctx),
+        }
+        if effect_run_id:
+            message_metadata["effect_key"] = self._effect_key(
+                effect_run_id,
+                "message_assistant",
+                effect_scope=effect_scope,
+            )
         self.orchestrator.memory.add_message(
             self.orchestrator.session_id,
             "assistant",
             doc_content,
-            metadata={
-                "type": "document",
-                "plan": ctx.plan,
-                "run_records": ctx.run_records,
-                "source_filenames": source_filenames,
-                "source_details": self.orchestrator._source_details(ctx),
-                "context_snapshot": self.orchestrator._context_snapshot(ctx),
-            },
+            metadata=message_metadata,
         )
         self.orchestrator.memory.set_context(self.orchestrator.session_id, "last_document", doc_content)
         self.orchestrator.memory.set_context(self.orchestrator.session_id, "last_plan", ctx.plan)
@@ -326,4 +392,25 @@ class DocumentStreamRunner:
                 doc_content,
                 ctx.plan,
                 source_filenames,
+                effect_key=self._effect_key(
+                    effect_run_id,
+                    "rolling_summary",
+                    effect_scope=effect_scope,
+                ),
             )
+
+    @staticmethod
+    def _effect_key(
+        run_id: str,
+        effect: str,
+        *,
+        effect_scope: str = "",
+    ) -> str | None:
+        normalized_run_id = str(run_id or "").strip()
+        if not normalized_run_id:
+            return None
+        prefix = f"{normalized_run_id}:tool_draft_document"
+        normalized_scope = str(effect_scope or "").strip()
+        if normalized_scope:
+            prefix = f"{prefix}:{normalized_scope}"
+        return f"{prefix}:{effect}"

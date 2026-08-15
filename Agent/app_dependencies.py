@@ -6,6 +6,7 @@ live on AppContext in app_context.py so this file does not become a new app.py.
 
 from __future__ import annotations
 
+import atexit
 import logging
 import os
 from datetime import datetime
@@ -13,20 +14,25 @@ from pathlib import Path
 
 from account_admin_service import AccountAdminDependencies, AccountAdminService
 from agents.knowledge_agent import KnowledgeAgent
+from agents.orchestrator import AgentOrchestrator
 from app_config import DEPARTMENT_DIRS
 from app_context import AppContext
 from auth import get_auth_manager
 from auth_route_service import AuthRouteDependencies, AuthRouteService
 from beta_ops_service import BetaOpsDependencies, BetaOpsService
+from chat_runtime import ChatGraphRuntime
 from knowledge_base import KnowledgeBase
 from knowledge_manifest import KnowledgeIngestionManifest
 from memory_v2 import get_memory
+from graph_artifacts import GraphArtifactStore
+from graph_persistence import create_graph_persistence
 from spreadsheet_store import SpreadsheetStore
 from storage_config import (
     INGESTION_MANIFEST_DB,
     KNOWLEDGE_BASE_DIR,
     KNOWLEDGE_SOURCE_DIR,
     SPREADSHEET_DB_PATH,
+    STORAGE_ROOT,
     ensure_storage_dirs,
     storage_summary,
 )
@@ -37,6 +43,20 @@ logger = logging.getLogger(__name__)
 
 
 def create_app_context() -> AppContext:
+    # Validate both runtime switches before constructing expensive services so
+    # unknown modes and explicitly requested missing graph dependencies fail at
+    # startup instead of silently selecting a different control flow.
+    configured_chat_runtime = ChatGraphRuntime.resolve_runtime_mode()
+    if (
+        configured_chat_runtime != "graph"
+        and "AGENT_ORCHESTRATOR" not in os.environ
+    ):
+        # A rollback chat deployment must also keep document drafting on its
+        # dependency-free rollback runner.  An explicit document graph request
+        # is still validated and fails closed below.
+        os.environ["AGENT_ORCHESTRATOR"] = "linear"
+    AgentOrchestrator.validate_runtime_configuration()
+
     bocha_api_key = os.getenv("BOCHA_API_KEY")
     if bocha_api_key:
         print(f"✓ 博查 API 已配置: {bocha_api_key[:10]}...")
@@ -64,6 +84,28 @@ def create_app_context() -> AppContext:
 
     upload_manager = get_upload_manager()
     print("✓ 文件上传系统已初始化")
+
+    # Create the configured saver during application startup.  Production
+    # PostgreSQL failures are intentionally fatal and never fall back to a
+    # process-local SQLite database.
+    graph_persistence = (
+        create_graph_persistence()
+        if configured_chat_runtime == "graph"
+        else None
+    )
+    graph_artifact_store = (
+        GraphArtifactStore(STORAGE_ROOT / "graph_runs", upload_manager)
+        if graph_persistence is not None
+        else None
+    )
+    if graph_persistence is not None:
+        print(
+            "✓ LangGraph 持久化已初始化"
+            f"（{graph_persistence.config.backend} / "
+            f"{graph_persistence.config.default_durability}）"
+        )
+    else:
+        print(f"✓ 聊天回滚模式已启用（{configured_chat_runtime}）")
 
     knowledge_agent = KnowledgeAgent()
     kb_instance = KnowledgeBase(str(KNOWLEDGE_BASE_DIR), lazy_load=True)
@@ -118,8 +160,22 @@ def create_app_context() -> AppContext:
         review_proposal_template_path=review_proposal_template_path,
         reimbursement_template_dir=reimbursement_template_dir,
         reimbursement_template_files=reimbursement_template_files,
+        graph_persistence=graph_persistence,
+        graph_artifact_store=graph_artifact_store,
         cookie_secure=os.getenv("COOKIE_SECURE", "false").lower() == "true",
     )
-    context.job_service()
+    try:
+        if configured_chat_runtime == "graph":
+            # Compile the production graph during startup.  Lazy construction
+            # would let a broken checkpointer or topology surface only after an
+            # authenticated request has already reached /api/chat.
+            context.chat_runtime()
+        context.job_service()
+    except Exception:
+        if graph_persistence is not None:
+            graph_persistence.close()
+        raise
+    if graph_persistence is not None:
+        atexit.register(graph_persistence.close)
     print("系统初始化完成！")
     return context

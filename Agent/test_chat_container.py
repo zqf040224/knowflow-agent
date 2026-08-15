@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from chat_container import ChatContainerDependencies, ChatServiceContainer
-from chat_runtime import LANGGRAPH_AVAILABLE
+from chat_runtime import ChatGraphRuntime
 
 
 class FakeMemory:
@@ -25,7 +25,9 @@ class FakeMemory:
     def set_context(self, session_id, key, value):
         self.context[(session_id, key)] = value
 
-    def update_rolling_summary(self, session_id, message, response, plan, sources):
+    def update_rolling_summary(
+        self, session_id, message, response, plan, sources, *, effect_key=None
+    ):
         pass
 
 
@@ -79,7 +81,44 @@ def test_chat_container_caches_services_and_runtime(monkeypatch):
     graph_runtime = container.chat_runtime()
     assert graph_runtime is container.chat_runtime()
     assert graph_runtime is not legacy_runtime
-    assert graph_runtime.uses_langgraph is LANGGRAPH_AVAILABLE
+    assert graph_runtime.runtime_mode == "graph"
+    assert graph_runtime.uses_langgraph is True
+
+
+def test_chat_container_default_runtime_streams_through_graph(monkeypatch):
+    memory = FakeMemory()
+    container = build_container(memory)
+    monkeypatch.delenv("CHAT_RUNTIME", raising=False)
+
+    runtime = container.chat_runtime()
+    events = parse_sse(runtime.stream(
+        {"message": "你是谁？"},
+        user_id="user_1",
+        user_info=None,
+    ))
+
+    event_types = [event["type"] for event in events]
+    assert runtime.runtime_mode == "graph"
+    assert "tool_plan" in event_types
+    assert "tool_call" in event_types
+    assert event_types[-2:] == ["run_done", "done"]
+    assert events[-1]["intent"] == "identity_help"
+    run_id = events[-1]["run_id"]
+    checkpoint_next_nodes = {
+        node
+        for snapshot in runtime._graph.get_state_history({
+            "configurable": {"thread_id": run_id}
+        })
+        for node in snapshot.next
+    }
+    assert {
+        "prepare",
+        "plan_tools",
+        "select_step",
+        "tool_identity_help",
+        "collect_result",
+        "finalize",
+    }.issubset(checkpoint_next_nodes)
 
 
 def test_chat_container_runtime_preserves_identity_contract(monkeypatch):
@@ -97,3 +136,21 @@ def test_chat_container_runtime_preserves_identity_contract(monkeypatch):
     assert events[-1]["intent"] == "identity_help"
     assert "智能知识库助手" in events[-1]["answer"]
     assert memory.context[("session_1", "last_answer")]
+
+
+def test_real_graph_and_planner_rollback_emit_byte_identical_sse(monkeypatch):
+    monkeypatch.delenv("CHAT_RUNTIME", raising=False)
+    container = build_container(FakeMemory())
+    graph_runtime = container.chat_runtime()
+    graph_runtime.deps.run_id_factory = lambda: "fixed-run"
+    planner_runtime = ChatGraphRuntime(
+        graph_runtime.deps,
+        runtime_mode="planner",
+    )
+
+    payload = {"message": "你是谁？", "session_id": "same-session"}
+    graph_chunks = list(graph_runtime.stream(payload, user_id="u1", user_info=None))
+    planner_chunks = list(planner_runtime.stream(payload, user_id="u1", user_info=None))
+
+    assert graph_chunks == planner_chunks
+    assert parse_sse(graph_chunks)[-1]["type"] == "done"

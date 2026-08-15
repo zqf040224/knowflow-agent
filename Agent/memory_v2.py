@@ -687,18 +687,35 @@ class TeamMemory:
     # ========== 消息管理 ==========
 
     def add_message(self, session_id: str, role: str, content: str,
-                    metadata: Dict = None) -> bool:
-        """添加消息"""
-        message = Message(role=role, content=content, metadata=metadata or {})
+                    metadata: Dict = None, effect_key: Optional[str] = None) -> bool:
+        """添加消息；有 effect_key 时重试只落库一次。"""
+        message_metadata = dict(metadata or {})
+        resolved_effect_key = str(
+            effect_key or message_metadata.get('effect_key') or ''
+        ).strip() or None
+        message = Message(role=role, content=content, metadata=message_metadata)
 
         # 保存到数据库
         with self._get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO messages (session_id, role, content, timestamp, metadata)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (session_id, message.role, message.content,
-                  message.timestamp, json.dumps(message.metadata)))
+                INSERT INTO messages (
+                    session_id, role, content, timestamp, metadata, effect_key
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT DO NOTHING
+            ''', (
+                session_id,
+                message.role,
+                message.content,
+                message.timestamp,
+                json.dumps(message.metadata),
+                resolved_effect_key,
+            ))
+            inserted = cursor.rowcount > 0
+
+            if not inserted:
+                conn.commit()
+                return False
 
             # 更新会话时间，首条用户消息自动命名
             now = datetime.now().isoformat()
@@ -850,9 +867,10 @@ class TeamMemory:
         assistant_message: str,
         plan: Dict = None,
         source_filenames: List[str] = None,
-    ):
-        """用轻量规则维护会话摘要，保证长多轮对话不只依赖最近消息。"""
-        previous = self.get_context(session_id, "rolling_summary", "") or ""
+        *,
+        effect_key: Optional[str] = None,
+    ) -> bool:
+        """原子、可幂等地更新会话摘要和任务状态。"""
         plan = plan or {}
         source_filenames = [
             str(source).strip()
@@ -867,35 +885,72 @@ class TeamMemory:
             "document_type": plan.get("document_type", ""),
             "sources": source_filenames[:8],
         }
+        resolved_effect_key = str(effect_key or "").strip() or None
+        now = datetime.now().isoformat()
+        with self._get_conn() as conn:
+            cursor = conn.cursor()
+            if resolved_effect_key:
+                cursor.execute('''
+                    INSERT INTO memory_effects (
+                        effect_key, session_id, effect_type, created_at
+                    ) VALUES (?, ?, 'rolling_summary', ?)
+                    ON CONFLICT(effect_key) DO NOTHING
+                ''', (resolved_effect_key, session_id, now))
+                if cursor.rowcount == 0:
+                    return False
 
-        parts = []
-        if previous:
-            parts.append(previous)
-        parts.append(
-            f"- 用户需求：{turn_summary['user']}\n"
-            f"  回复要点：{turn_summary['assistant']}\n"
-            f"  任务：{turn_summary['task_type'] or '未标注'} / {turn_summary['document_type'] or '未标注'}"
-        )
-        if turn_summary["sources"]:
-            parts.append(f"  来源：{'；'.join(turn_summary['sources'])}")
+            cursor.execute('''
+                SELECT context_value FROM session_context
+                WHERE session_id = ? AND context_key = 'rolling_summary'
+            ''', (session_id,))
+            row = cursor.fetchone()
+            previous = json.loads(row[0]) if row else ""
+            previous = str(previous or "")
 
-        summary = "\n".join(parts)
-        if len(summary) > 2400:
-            summary = summary[-2400:]
-            first_line = summary.find("\n- 用户需求：")
-            if first_line > 0:
-                summary = summary[first_line + 1:]
+            parts = []
+            if previous:
+                parts.append(previous)
+            parts.append(
+                f"- 用户需求：{turn_summary['user']}\n"
+                f"  回复要点：{turn_summary['assistant']}\n"
+                f"  任务：{turn_summary['task_type'] or '未标注'} / "
+                f"{turn_summary['document_type'] or '未标注'}"
+            )
+            if turn_summary["sources"]:
+                parts.append(f"  来源：{'；'.join(turn_summary['sources'])}")
 
-        self._set_context_values(session_id, {
-            "rolling_summary": summary,
-            "task_state": {
-            "last_user_request": turn_summary["user"],
-            "last_document_excerpt": self._compact_text(assistant_message, 900),
-            "last_plan": plan,
-            "source_filenames": source_filenames[:8],
-            "updated_at": datetime.now().isoformat(),
-            },
-        })
+            summary = "\n".join(parts)
+            if len(summary) > 2400:
+                summary = summary[-2400:]
+                first_line = summary.find("\n- 用户需求：")
+                if first_line > 0:
+                    summary = summary[first_line + 1:]
+
+            values = {
+                "rolling_summary": summary,
+                "task_state": {
+                    "last_user_request": turn_summary["user"],
+                    "last_document_excerpt": self._compact_text(
+                        assistant_message, 900
+                    ),
+                    "last_plan": plan,
+                    "source_filenames": source_filenames[:8],
+                    "updated_at": now,
+                },
+            }
+            cursor.executemany('''
+                INSERT INTO session_context (
+                    session_id, context_key, context_value, updated_at
+                ) VALUES (?, ?, ?, ?)
+                ON CONFLICT(session_id, context_key) DO UPDATE SET
+                    context_value = excluded.context_value,
+                    updated_at = excluded.updated_at
+            ''', [
+                (session_id, key, json.dumps(value), now)
+                for key, value in values.items()
+            ])
+            conn.commit()
+        return True
 
     def _compact_text(self, text: str, limit: int) -> str:
         text = re.sub(r'\s+', ' ', text or '').strip()

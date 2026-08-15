@@ -17,8 +17,12 @@ class FakeMemory:
     def set_context(self, session_id, key, value):
         self.context[(session_id, key)] = value
 
-    def update_rolling_summary(self, session_id, message, response, plan, sources):
-        self.summaries.append((session_id, message, response, plan, sources))
+    def update_rolling_summary(
+        self, session_id, message, response, plan, sources, *, effect_key=None
+    ):
+        self.summaries.append(
+            (session_id, message, response, plan, sources, effect_key)
+        )
 
 
 def parse_sse(chunks):
@@ -106,3 +110,48 @@ def test_lightweight_long_response_streams_multiple_answer_deltas():
 
     assert len(deltas) > 1
     assert "".join(deltas) == events[-1]["answer"]
+
+
+def test_lightweight_message_effect_keys_follow_selected_tool_node():
+    memory = FakeMemory()
+    route = RouteResult(
+        intent=INTENT_CLARIFY,
+        confidence=0.8,
+        reason="需要补充信息",
+        requires_retrieval=False,
+    )
+
+    parse_sse(service(memory).stream(
+        "请帮我处理",
+        "s1",
+        user_metadata={"run_id": "run-light", "request_id": "request-1"},
+        route=route,
+    ))
+
+    assert memory.messages[0][3]["effect_key"] == "run-light:tool_clarify:message_user"
+    assert memory.messages[1][3]["effect_key"] == "run-light:tool_clarify:message_assistant"
+    assert memory.summaries[0][-1] == "run-light:tool_clarify:rolling_summary"
+
+
+def test_lightweight_effect_keys_include_optional_step_scope():
+    memory = FakeMemory()
+    route = RouteResult(
+        intent=INTENT_CLARIFY,
+        confidence=0.8,
+        reason="需要补充信息",
+        requires_retrieval=False,
+    )
+
+    parse_sse(service(memory).stream(
+        "请帮我处理",
+        "s1",
+        user_metadata={"run_id": "run-light", "effect_scope": "step:2"},
+        route=route,
+    ))
+
+    assert memory.messages[0][3]["effect_key"] == (
+        "run-light:tool_clarify:step:2:message_user"
+    )
+    assert memory.messages[1][3]["effect_key"] == (
+        "run-light:tool_clarify:step:2:message_assistant"
+    )

@@ -1,0 +1,69 @@
+# Runtime configuration and credentials. Keep only the public template.
+.env*
+!.env.example
+
+# Version-control metadata and local tooling state.
+.git
+.gitignore
+.github
+.claude
+.idea
+.vscode
+.DS_Store
+
+# Python environments, bytecode, caches, and build/test artifacts.
+.venv
+venv
+env
+__pycache__
+*.py[cod]
+*.egg-info
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.tox
+.nox
+.coverage
+.coverage.*
+htmlcov
+build
+dist
+
+# Other dependency caches.
+node_modules
+
+# Local logs and process artifacts.
+*.log
+*.pid
+
+# Local databases, private keys, and certificates.
+*.db
+*.db-*
+*.sqlite*
+*.pem
+*.key
+*.p12
+*.pfx
+*.ppk
+*.jks
+*.keystore
+*.crt
+*.cer
+*.der
+id_rsa
+id_ed25519
+secrets
+credentials
+
+# Private/runtime application state. These paths are created or mounted at
+# runtime; they must never be baked into the image.
+data
+uploads
+outputs
+graph_runs
+知识库
+
+# knowledge_base is also a Python package. Exclude its generated indexes,
+# databases, backups, and other runtime state while retaining package source.
+knowledge_base/*
+!knowledge_base/*.py

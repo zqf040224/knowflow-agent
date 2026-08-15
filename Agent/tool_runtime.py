@@ -96,7 +96,11 @@ class ToolOrchestrator:
 
             route = self._route_for_step(step, task_plan.route)
             step_done = None
-            step_prepared = self._prepared_for_step(prepared, current_message)
+            step_prepared = self._prepared_for_step(
+                prepared,
+                current_message,
+                step_index=index,
+            )
             for event in self._stream_tool_events(tool, step_prepared, route):
                 event_type = event.get("type")
                 if event_type in {"start", "session", "route"}:
@@ -106,6 +110,12 @@ class ToolOrchestrator:
                     continue
                 if event_type == "run_done":
                     continue
+                if event_type == "error":
+                    # An errored tool has no trustworthy result to aggregate.
+                    # Stop the run immediately so callers never observe an
+                    # ``error`` followed by a synthetic successful ``done``.
+                    yield sse(event)
+                    return
                 if not is_final_step and event_type in {"answer_start", "answer_delta", "answer_done", "content"}:
                     continue
                 yield sse(event)
@@ -156,14 +166,23 @@ class ToolOrchestrator:
                 yield event
 
     @staticmethod
-    def _prepared_for_step(prepared, message: str):
+    def _prepared_for_step(prepared, message: str, *, step_index: int = 0):
+        user_metadata = (
+            dict(prepared.user_metadata)
+            if isinstance(getattr(prepared, "user_metadata", None), dict)
+            else {}
+        )
+        # Target stores use this scope as part of their unique effect keys.  A
+        # plan may legitimately call the same tool more than once, so run_id +
+        # tool name alone is not a sufficient idempotency boundary.
+        user_metadata["effect_scope"] = f"step:{int(step_index) + 1}"
         return SimpleNamespace(
             message=message,
             display_message=prepared.display_message,
             session_id=prepared.session_id,
             user_id=prepared.user_id,
             user_info=prepared.user_info,
-            user_metadata=prepared.user_metadata,
+            user_metadata=user_metadata,
             attachments=getattr(prepared, "attachments", []),
         )
 

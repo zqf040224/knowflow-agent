@@ -6,6 +6,7 @@ from chat_architecture import (
     INTENT_KNOWLEDGE_QA,
     INTENT_SPREADSHEET_TRANSFORM,
     IntentRouter,
+    RouteResult,
 )
 
 
@@ -30,6 +31,22 @@ def route(message, attachments=None, has_last_document=False):
         attachments=attachments or [],
         has_last_document=has_last_document,
     )
+
+
+def test_route_result_dict_round_trip():
+    original = RouteResult(
+        intent=INTENT_DOC_DRAFTING,
+        confidence=0.91,
+        reason="需要形成正式材料",
+        document_type="会议审议案",
+        template_key="meeting",
+        requires_retrieval=True,
+        actions=[{"type": "export_docx", "filename": "会议材料.docx"}],
+    )
+
+    restored = RouteResult.from_dict(original.to_dict())
+
+    assert restored.to_dict() == original.to_dict()
 
 
 def test_knowledge_qa_is_default_for_nas_usage():

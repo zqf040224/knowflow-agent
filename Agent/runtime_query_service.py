@@ -18,6 +18,7 @@ class RuntimeQueryDependencies:
     build_access_filter: Callable[[Any], dict]
     build_vector_map: Callable[..., dict]
     now_factory: Callable[[], datetime]
+    graph_health: Callable[[], dict] | None = None
 
 
 class RuntimeQueryService:
@@ -25,11 +26,20 @@ class RuntimeQueryService:
         self.deps = deps
 
     def health(self) -> dict:
-        return {
+        payload = {
             "status": "ok",
             "timestamp": self.deps.now_factory().isoformat(),
             "storage": self.deps.storage_health(),
         }
+        if self.deps.graph_health:
+            try:
+                payload["langgraph"] = self.deps.graph_health()
+            except Exception as exc:
+                payload["langgraph"] = {
+                    "ok": False,
+                    "error": str(exc)[:160],
+                }
+        return payload
 
     def knowledge_health(self, user_info: Any) -> dict:
         consistency = self.deps.knowledge_manifest.consistency_report(

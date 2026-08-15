@@ -1,8 +1,11 @@
 import json
+import hashlib
 import logging
 import sys
 import os
 import time
+from math import isfinite
+from uuid import uuid4
 from dataclasses import dataclass, field
 from typing import Callable, Optional, List
 
@@ -57,13 +60,23 @@ class PreparedDocumentRun:
     request_with_context: str
     previous_context: str
     session_id: Optional[str]
+    run_id: str
+    persisted_user_message: str = ""
+    effect_scope: str = ""
 
 
 class AgentOrchestrator:
     MAX_TOTAL_ROUNDS = 3
     MAX_REVISION_ROUNDS = MAX_TOTAL_ROUNDS - 1
 
-    def __init__(self, memory=None, session_id: Optional[str] = None):
+    def __init__(
+        self,
+        memory=None,
+        session_id: Optional[str] = None,
+        *,
+        graph_checkpointer=None,
+        graph_durability: str = "async",
+    ):
         self.context_agent = ContextAgent()
         self.planner = PlannerAgent()
         self.search_agent = SearchAgent()
@@ -77,19 +90,53 @@ class AgentOrchestrator:
         self.user_profile: Optional[dict] = None
         self.user_info: Optional[UserInfo] = None
         self._current_agent_memory_context = ""
-        self._reflection_done = False  # 每篇文档只反思一次
-        self._prefer_langgraph = self._langgraph_requested()
+        self._current_effect_run_id = ""
+        self._current_effect_scope = ""
+        self._current_persisted_user_message: Optional[str] = None
+        self._document_runtime_snapshot: dict = {}
+        self._document_runtime = self.validate_runtime_configuration()
+        self._prefer_langgraph = self._document_runtime == "graph"
+        self._document_graph_runner = None
+        self._graph_checkpointer = graph_checkpointer
+        self._graph_durability = graph_durability
 
         if memory and session_id:
             self._setup_agents_session()
 
-    @staticmethod
-    def _langgraph_requested() -> bool:
-        value = os.getenv("AGENT_ORCHESTRATOR", "").strip().lower()
-        return value in {"langgraph", "graph", "1", "true", "yes", "on"}
+    @classmethod
+    def resolve_document_runtime(cls, explicit: Optional[str] = None) -> str:
+        value = (
+            explicit
+            if explicit is not None
+            else os.getenv("AGENT_ORCHESTRATOR", "graph")
+        )
+        normalized = str(value or "graph").strip().lower()
+        if normalized in {"langgraph", "graph", "1", "true", "yes", "on"}:
+            return "graph"
+        if normalized in {"linear", "legacy", "0", "false", "no", "off"}:
+            return "linear"
+        raise ValueError(
+            f"Unsupported AGENT_ORCHESTRATOR value {value!r}; "
+            "expected graph/langgraph/on or linear/legacy/off"
+        )
+
+    @classmethod
+    def validate_runtime_configuration(cls) -> str:
+        runtime = cls.resolve_document_runtime()
+        if runtime == "graph" and not LANGGRAPH_AVAILABLE:
+            raise RuntimeError(
+                "AGENT_ORCHESTRATOR=graph requires LangGraph, but it could not "
+                f"be imported: {LANGGRAPH_IMPORT_ERROR or 'unknown import error'}"
+            )
+        return runtime
+
+    @classmethod
+    def _langgraph_requested(cls) -> bool:
+        """Compatibility predicate retained for one rollback release."""
+        return cls.resolve_document_runtime() == "graph"
 
     def _should_use_langgraph(self) -> bool:
-        return self._prefer_langgraph and LANGGRAPH_AVAILABLE
+        return self._prefer_langgraph
 
     def _setup_agents_session(self):
         for agent in [self.context_agent, self.planner, self.search_agent,
@@ -126,21 +173,100 @@ class AgentOrchestrator:
 
         return handler
 
-    def _prepare_document_run(self, user_request: str, session_id: Optional[str] = None) -> PreparedDocumentRun:
+    def _prepare_document_run(
+        self,
+        user_request: str,
+        session_id: Optional[str] = None,
+        *,
+        run_id: str = "",
+        persisted_user_message: Optional[str] = None,
+        effect_scope: str = "",
+    ) -> PreparedDocumentRun:
         self.think_log = []
+        provided_run_id = str(run_id or "").strip()
+        normalized_effect_scope = str(effect_scope or "").strip()
+        safe_user_message = str(
+            user_request
+            if persisted_user_message is None
+            else persisted_user_message
+        )
+        self._current_effect_run_id = provided_run_id
+        self._current_effect_scope = normalized_effect_scope
+        self._current_persisted_user_message = safe_user_message
 
         if session_id and session_id != self.session_id:
             self.set_session(session_id, self.memory)
 
         if self.memory and self.session_id:
-            self.memory.add_message(self.session_id, "user", user_request)
+            metadata = (
+                {
+                    "run_id": provided_run_id,
+                    "effect_key": self._document_effect_key(
+                        "message_user",
+                        run_id=provided_run_id,
+                        effect_scope=normalized_effect_scope,
+                    ),
+                }
+                if provided_run_id
+                else None
+            )
+            self.memory.add_message(
+                self.session_id,
+                "user",
+                safe_user_message,
+                metadata=metadata,
+            )
 
         self._current_agent_memory_context = self._recall_agent_context(user_request)
 
         previous_context = ""
         if self.memory and self.session_id:
-            previous_context = self.memory.get_context(self.session_id, "last_request", "")
-            self.memory.set_context(self.session_id, "last_request", user_request)
+            snapshot_key = (
+                (
+                    f"document_prepare:{provided_run_id}:{normalized_effect_scope}"
+                    if normalized_effect_scope
+                    else f"document_prepare:{provided_run_id}"
+                )
+                if provided_run_id
+                else ""
+            )
+            request_digest = hashlib.sha256(
+                str(user_request or "").encode("utf-8")
+            ).hexdigest()
+            snapshot = (
+                self.memory.get_context(self.session_id, snapshot_key, None)
+                if snapshot_key
+                else None
+            )
+            if isinstance(snapshot, dict):
+                if snapshot.get("request_digest") != request_digest:
+                    raise RuntimeError(
+                        "document run_id was reused with a different request"
+                    )
+                previous_context = str(snapshot.get("previous_context") or "")
+            else:
+                previous_context = self.memory.get_context(
+                    self.session_id,
+                    "last_request",
+                    "",
+                )
+                if snapshot_key:
+                    # Persist the prior turn before mutating last_request. A
+                    # crash anywhere after this write can replay preparation
+                    # without treating the current request as its predecessor.
+                    self.memory.set_context(
+                        self.session_id,
+                        snapshot_key,
+                        {
+                            "request_digest": request_digest,
+                            "previous_context": previous_context,
+                        },
+                    )
+            self.memory.set_context(
+                self.session_id,
+                "last_request",
+                safe_user_message,
+            )
 
         request_with_context = user_request
         if previous_context:
@@ -151,7 +277,32 @@ class AgentOrchestrator:
             request_with_context=request_with_context,
             previous_context=previous_context,
             session_id=self.session_id,
+            run_id=provided_run_id or str(uuid4()),
+            persisted_user_message=safe_user_message,
+            effect_scope=normalized_effect_scope,
         )
+
+    def _document_effect_key(
+        self,
+        effect: str,
+        *,
+        run_id: str = "",
+        effect_scope: str = "",
+    ) -> Optional[str]:
+        resolved_run_id = str(
+            run_id or getattr(self, "_current_effect_run_id", "") or ""
+        ).strip()
+        if not resolved_run_id:
+            return None
+        resolved_scope = str(
+            effect_scope
+            or getattr(self, "_current_effect_scope", "")
+            or ""
+        ).strip()
+        prefix = f"{resolved_run_id}:tool_draft_document"
+        if resolved_scope:
+            prefix = f"{prefix}:{resolved_scope}"
+        return f"{prefix}:{effect}"
 
     def _recall_agent_context(self, user_request: str) -> str:
         """Build one bounded, user-scoped recall packet for the whole run.
@@ -190,30 +341,60 @@ class AgentOrchestrator:
             return ""
 
     def _build_document_run_result(self, ctx: ContextPacket, document_content: str,
-                                   user_request: str, *, runtime: str = "") -> dict:
+                                   user_request: str, *, runtime: str = "",
+                                   quality_status: str = "passed",
+                                   revisions_applied: Optional[int] = None,
+                                   run_id: str = "",
+                                   effect_scope: str = "") -> dict:
         final_confidence = ctx.revision_history[-1]["confidence"] if ctx.revision_history else 0.8
         source_filenames = self._source_filenames(ctx)
         source_details = self._source_details(ctx)
+        stored_user_message = getattr(
+            self,
+            "_current_persisted_user_message",
+            None,
+        )
+        persisted_user_message = str(
+            user_request if stored_user_message is None else stored_user_message
+        )
 
         if self.memory and self.session_id:
+            message_metadata = {
+                "type": "document",
+                "plan": ctx.plan,
+                "run_records": ctx.run_records,
+                "run_id": run_id,
+                "quality_status": quality_status,
+                "source_filenames": source_filenames,
+                "source_details": source_details,
+                "context_snapshot": self._context_snapshot(ctx),
+            }
+            if str(
+                run_id or getattr(self, "_current_effect_run_id", "") or ""
+            ).strip():
+                message_metadata["effect_key"] = AgentOrchestrator._document_effect_key(
+                    self,
+                    "message_assistant",
+                    run_id=run_id,
+                    effect_scope=effect_scope,
+                )
             self.memory.add_message(self.session_id, "assistant", document_content,
-                                   metadata={
-                                       "type": "document",
-                                       "plan": ctx.plan,
-                                       "run_records": ctx.run_records,
-                                       "source_filenames": source_filenames,
-                                       "source_details": source_details,
-                                       "context_snapshot": self._context_snapshot(ctx),
-                                   })
+                                   metadata=message_metadata)
             self.memory.set_context(self.session_id, "last_document", document_content)
             self.memory.set_context(self.session_id, "last_plan", ctx.plan)
             if hasattr(self.memory, "update_rolling_summary"):
                 self.memory.update_rolling_summary(
                     self.session_id,
-                    user_request,
+                    persisted_user_message,
                     document_content,
                     ctx.plan,
                     source_filenames,
+                    effect_key=AgentOrchestrator._document_effect_key(
+                        self,
+                        "rolling_summary",
+                        run_id=run_id,
+                        effect_scope=effect_scope,
+                    ),
                 )
 
         result = {
@@ -221,12 +402,22 @@ class AgentOrchestrator:
             "plan": ctx.plan,
             "think_log": self.think_log,
             "confidence": final_confidence,
-            "revision_rounds": len([h for h in ctx.revision_history if h.get("needs_revision")]),
+            "revision_rounds": (
+                revisions_applied
+                if revisions_applied is not None
+                else len({
+                    h.get("round")
+                    for h in ctx.revision_history
+                    if h.get("needs_revision") and h.get("round") is not None
+                })
+            ),
             "session_id": self.session_id,
             "run_records": ctx.run_records,
             "source_filenames": source_filenames,
             "source_details": source_details,
             "audit_summary": ctx.audit_summary,
+            "quality_status": quality_status,
+            "run_id": run_id,
         }
         if runtime:
             result["runtime"] = runtime
@@ -235,48 +426,105 @@ class AgentOrchestrator:
     # ========== 非流式运行 ==========
 
     def run(self, user_request: str, on_think: Optional[Callable] = None,
-            session_id: Optional[str] = None) -> dict:
+            session_id: Optional[str] = None, *, run_id: str = "",
+            persisted_user_message: Optional[str] = None,
+            effect_scope: str = "") -> dict:
         if self._should_use_langgraph():
-            return self._run_langgraph(user_request, on_think=on_think, session_id=session_id)
-        if self._prefer_langgraph and not LANGGRAPH_AVAILABLE:
-            logger.warning("AGENT_ORCHESTRATOR=langgraph requested but unavailable: %s", LANGGRAPH_IMPORT_ERROR)
-
-        prepared_run = self._prepare_document_run(user_request, session_id=session_id)
+            return self._run_langgraph(
+                user_request,
+                on_think=on_think,
+                session_id=session_id,
+                run_id=run_id,
+                persisted_user_message=persisted_user_message,
+                effect_scope=effect_scope,
+            )
+        prepared_run = self._prepare_document_run(
+            user_request,
+            session_id=session_id,
+            run_id=run_id,
+            persisted_user_message=persisted_user_message,
+            effect_scope=effect_scope,
+        )
         think_handler = self._think_handler(on_think)
         run_result = DocumentLinearRunner(self).run(prepared_run, think_handler=think_handler)
-        return self._build_document_run_result(run_result.ctx, run_result.document_content, user_request)
+        return self._build_document_run_result(
+            run_result.ctx,
+            run_result.document_content,
+            prepared_run.persisted_user_message,
+            quality_status=run_result.quality_status,
+            revisions_applied=run_result.revisions_applied,
+            run_id=prepared_run.run_id,
+            effect_scope=prepared_run.effect_scope,
+        )
 
     # ========== LangGraph 运行 ==========
 
     def _run_langgraph(self, user_request: str, on_think: Optional[Callable] = None,
-                       session_id: Optional[str] = None) -> dict:
+                       session_id: Optional[str] = None, *, run_id: str = "",
+                       persisted_user_message: Optional[str] = None,
+                       effect_scope: str = "") -> dict:
         """Use LangGraph for the non-streaming orchestration path.
 
         The node bodies intentionally reuse the existing Agent steps so the
         inner prompts, model calls, memory behavior and review metadata remain
         compatible with the current Flask endpoints.
         """
-        prepared_run = self._prepare_document_run(user_request, session_id=session_id)
+        prepared_run = self._prepare_document_run(
+            user_request,
+            session_id=session_id,
+            run_id=run_id,
+            persisted_user_message=persisted_user_message,
+            effect_scope=effect_scope,
+        )
         think_handler = self._think_handler(on_think)
 
-        self._reflection_done = False
-        graph_result = DocumentGraphRunner(self).run(
+        graph_result = self._get_document_graph_runner().run(
             prepared_run,
             think_handler=think_handler,
-            thread_id=self.session_id or "default",
+            thread_id=prepared_run.run_id,
         )
         return self._build_document_run_result(
             graph_result.ctx,
             graph_result.document_content,
-            user_request,
+            prepared_run.persisted_user_message,
             runtime="langgraph",
+            quality_status=graph_result.quality_status,
+            revisions_applied=graph_result.revisions_applied,
+            run_id=graph_result.run_id,
+            effect_scope=prepared_run.effect_scope,
         )
+
+    def _get_document_graph_runner(self) -> DocumentGraphRunner:
+        if self._document_graph_runner is None:
+            self._document_graph_runner = DocumentGraphRunner(
+                self,
+                checkpointer=self._graph_checkpointer,
+                durability=self._graph_durability,
+            )
+        return self._document_graph_runner
 
     # ========== 流式运行 ==========
 
     def run_stream(self, user_request: str, on_think: Optional[Callable] = None,
-                   session_id: Optional[str] = None):
-        prepared_run = self._prepare_document_run(user_request, session_id=session_id)
+                   session_id: Optional[str] = None, *, run_id: str = "",
+                   persisted_user_message: Optional[str] = None,
+                   effect_scope: str = ""):
+        prepared_run = self._prepare_document_run(
+            user_request,
+            session_id=session_id,
+            run_id=run_id,
+            persisted_user_message=persisted_user_message,
+            effect_scope=effect_scope,
+        )
+        if self._should_use_langgraph():
+            think_handler = self._think_handler(on_think)
+            yield from self._get_document_graph_runner().stream(
+                prepared_run,
+                think_handler=think_handler,
+                thread_id=prepared_run.run_id,
+                user_request=user_request,
+            )
+            return
         yield from DocumentStreamRunner(self).run(
             prepared_run,
             user_request=user_request,
@@ -349,7 +597,16 @@ class AgentOrchestrator:
             conversation_history = []
             last_document = ""
             last_plan = {}
-            if self.memory and self.session_id:
+            runtime_snapshot = getattr(self, "_document_runtime_snapshot", {})
+            if isinstance(runtime_snapshot, dict) and runtime_snapshot:
+                conversation_history = list(
+                    runtime_snapshot.get("conversation_history") or []
+                )
+                last_document = str(
+                    runtime_snapshot.get("last_document") or ""
+                )
+                last_plan = dict(runtime_snapshot.get("last_plan") or {})
+            elif self.memory and self.session_id:
                 conversation_history = self.memory.get_session_history(
                     self.session_id, limit=10
                 )
@@ -486,21 +743,165 @@ class AgentOrchestrator:
         }
         return self.writer.process(input_data, on_think=on_think)
 
+    def _step_write_stream(self, ctx: ContextPacket, revision_round: int, on_think) -> str:
+        """Collect one complete streamed draft before exposing it to review."""
+        chunks = self.writer.process_stream({
+            "user_request": ctx.user_request,
+            "search_context": self._writer_search_context(ctx, revision_round),
+            "knowledge_context": self._writer_knowledge_context(ctx, revision_round),
+            "document_type": ctx.plan.get("document_type", "通用公文"),
+            "task_type": ctx.plan.get("task_type", "公文生成"),
+            "key_points": self._merged_key_points(ctx),
+            "revision_history": ctx.revision_history,
+            "knowledge_sources": ctx.knowledge_sources,
+            "context_analysis": ctx.context_analysis,
+            "memory_context": ctx.memory_context,
+            "last_document": ctx.last_document,
+            "draft_document": "" if revision_round == 0 else ctx.last_document,
+            "last_plan": ctx.last_plan,
+            "user_constraints": ctx.user_constraints,
+            "unresolved_questions": ctx.unresolved_questions,
+            "evidence_items": ctx.compact_evidence,
+            "revision_mode": revision_round > 0,
+        }, on_think=on_think)
+        return "".join(chunks)
+
+    @staticmethod
+    def _sanitize_document_output(text: str, user_request: str) -> str:
+        return DocumentStreamRunner._sanitize_unsupported_specifics(text, user_request)
+
     def _step_review(self, ctx: ContextPacket, document_content: str,
                      on_think) -> AgentResult:
         """阶段5b: 审查"""
-        return self.reviewer.process({
-            "user_request": ctx.user_request,
-            "document_content": document_content,
-            "document_type": ctx.plan.get("document_type", "通用公文"),
-            "task_type": ctx.plan.get("task_type", "公文生成"),
-            "key_points": ctx.plan.get("key_points", []),
-            "source_filenames": self._source_filenames(ctx),
-            "context_analysis": ctx.context_analysis,
-            "memory_context": ctx.memory_context,
-            "user_constraints": ctx.user_constraints,
-            "evidence_items": ctx.evidence_items,
-        }, on_think=on_think)
+        failures = []
+        model_responses = []
+        original_call = self.reviewer.call_llm
+        original_parse = self.reviewer._parse_json_response
+        had_call_override = "call_llm" in self.reviewer.__dict__
+        had_parse_override = "_parse_json_response" in self.reviewer.__dict__
+        previous_call_override = self.reviewer.__dict__.get("call_llm")
+        previous_parse_override = self.reviewer.__dict__.get("_parse_json_response")
+
+        def tracked_call(*args, **kwargs):
+            try:
+                response = original_call(*args, **kwargs)
+                model_responses.append(response)
+                return response
+            except Exception as exc:
+                failures.append(exc)
+                raise
+
+        def tracked_parse(*args, **kwargs):
+            try:
+                return original_parse(*args, **kwargs)
+            except Exception as exc:
+                failures.append(exc)
+                raise
+
+        self.reviewer.call_llm = tracked_call
+        self.reviewer._parse_json_response = tracked_parse
+        try:
+            result = self.reviewer.process({
+                "user_request": ctx.user_request,
+                "document_content": document_content,
+                "document_type": ctx.plan.get("document_type", "通用公文"),
+                "task_type": ctx.plan.get("task_type", "公文生成"),
+                "key_points": ctx.plan.get("key_points", []),
+                "source_filenames": self._source_filenames(ctx),
+                "context_analysis": ctx.context_analysis,
+                "memory_context": ctx.memory_context,
+                "user_constraints": ctx.user_constraints,
+                "evidence_items": ctx.evidence_items,
+            }, on_think=on_think)
+        finally:
+            if had_call_override:
+                self.reviewer.call_llm = previous_call_override
+            else:
+                self.reviewer.__dict__.pop("call_llm", None)
+            if had_parse_override:
+                self.reviewer._parse_json_response = previous_parse_override
+            else:
+                self.reviewer.__dict__.pop("_parse_json_response", None)
+
+        raw_response_error = None
+        for response in model_responses:
+            try:
+                self._parse_reviewer_model_response_strict(response)
+            except (TypeError, ValueError, json.JSONDecodeError) as exc:
+                raw_response_error = exc
+                break
+
+        if failures or raw_response_error is not None:
+            failure = failures[-1] if failures else raw_response_error
+            error = str(failure)[:500] or "Reviewer model call failed"
+            logger.error("Reviewer 不可用，文档流程按 fail-closed 终止: %s", error)
+            return AgentResult(
+                success=False,
+                content="",
+                agent_name=self.reviewer.name,
+                confidence=0.0,
+                metadata={"review_unavailable": True},
+                error_info={"error": error},
+            )
+        return result
+
+    @staticmethod
+    def _parse_reviewer_model_response_strict(response_text: str) -> dict:
+        """Strictly validate the raw model response before trusting Reviewer fallbacks."""
+        if not isinstance(response_text, str) or not response_text.strip():
+            raise TypeError("Reviewer model returned an empty or non-text response")
+
+        text = response_text.strip()
+        if text.startswith("```"):
+            lines = text.splitlines()
+            if len(lines) < 3 or not lines[-1].strip().startswith("```"):
+                raise ValueError("Reviewer model returned an incomplete JSON code block")
+            text = "\n".join(lines[1:-1]).strip()
+
+        parsed = json.loads(text)
+        if not isinstance(parsed, dict):
+            raise TypeError("Reviewer model response must be a JSON object")
+        return parsed
+
+    @staticmethod
+    def _validated_review_metadata(review_result: AgentResult) -> dict:
+        if not getattr(review_result, "success", False):
+            error_info = getattr(review_result, "error_info", {}) or {}
+            raise RuntimeError(error_info.get("error") or "Reviewer returned an unsuccessful result")
+        metadata = getattr(review_result, "metadata", None)
+        if not isinstance(metadata, dict) or not metadata:
+            raise RuntimeError("Reviewer returned no review metadata")
+        if not isinstance(metadata.get("needs_revision"), bool):
+            raise RuntimeError("Reviewer metadata is missing a boolean needs_revision")
+        confidence = metadata.get("confidence")
+        if (
+            isinstance(confidence, bool)
+            or not isinstance(confidence, (int, float))
+            or not isfinite(confidence)
+            or not 0 <= confidence <= 1
+        ):
+            raise RuntimeError("Reviewer metadata contains invalid confidence")
+        has_review_issue = False
+        for field_name in (
+            "format_check", "content_check", "logic_check",
+            "language_check", "fact_check",
+        ):
+            check = metadata.get(field_name)
+            if not isinstance(check, dict):
+                raise RuntimeError(f"Reviewer metadata is missing {field_name}")
+            if not isinstance(check.get("passed"), bool):
+                raise RuntimeError(f"Reviewer metadata is missing {field_name}.passed")
+            if not isinstance(check.get("issues"), list):
+                raise RuntimeError(f"Reviewer metadata is missing {field_name}.issues")
+            if check["passed"] and check["issues"]:
+                raise RuntimeError(f"Reviewer metadata contains contradictory {field_name}")
+            has_review_issue = has_review_issue or not check["passed"] or bool(check["issues"])
+        for field_name in ("suggestions", "revision_focus"):
+            if not isinstance(metadata.get(field_name), list):
+                raise RuntimeError(f"Reviewer metadata is missing {field_name}")
+        if has_review_issue and not metadata["needs_revision"]:
+            raise RuntimeError("Reviewer metadata contains issues but does not request revision")
+        return dict(metadata)
 
     def _step_reflection(self, ctx: ContextPacket, document_content: str,
                          on_think) -> AgentResult:
@@ -693,6 +1094,66 @@ class AgentOrchestrator:
             "has_last_document": bool(ctx.last_document),
             "has_recalled_context": bool(ctx.memory_context),
         }
+
+    @staticmethod
+    def _graph_json_safe(value):
+        """Validate graph state as JSON-like data; never stringify objects."""
+        if value is None or isinstance(value, (str, int, bool)):
+            return value
+        if isinstance(value, float):
+            if not isfinite(value):
+                raise TypeError("Graph state cannot contain non-finite floats")
+            return value
+        if isinstance(value, dict):
+            if any(not isinstance(key, str) for key in value):
+                raise TypeError("Graph state mapping keys must be strings")
+            return {
+                key: AgentOrchestrator._graph_json_safe(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [AgentOrchestrator._graph_json_safe(item) for item in value]
+        raise TypeError(
+            "Graph state contains unsupported runtime object: "
+            f"{type(value).__module__}.{type(value).__qualname__}"
+        )
+
+    def _graph_context_to_state(self, ctx: ContextPacket) -> dict:
+        fields = (
+            "user_request", "context_analysis", "plan", "search_context",
+            "knowledge_context", "knowledge_sources", "search_sources",
+            "evidence_items", "compact_evidence", "revision_history",
+            "run_records", "last_document", "last_plan", "user_constraints",
+            "unresolved_questions", "user_profile", "memory_context",
+            "audit_summary",
+        )
+        return {
+            field_name: self._graph_json_safe(getattr(ctx, field_name))
+            for field_name in fields
+        }
+
+    @staticmethod
+    def _graph_state_to_context(state: dict) -> ContextPacket:
+        return ContextPacket(
+            user_request=state.get("user_request", state.get("request_with_context", "")),
+            context_analysis=dict(state.get("context_analysis", {}) or {}),
+            plan=dict(state.get("plan", {}) or {}),
+            search_context=state.get("search_context", "") or "",
+            knowledge_context=state.get("knowledge_context", "") or "",
+            knowledge_sources=list(state.get("knowledge_sources", []) or []),
+            search_sources=list(state.get("search_sources", []) or []),
+            evidence_items=list(state.get("evidence_items", []) or []),
+            compact_evidence=list(state.get("compact_evidence", []) or []),
+            revision_history=list(state.get("revision_history", []) or []),
+            run_records=list(state.get("run_records", []) or []),
+            last_document=state.get("last_document", "") or "",
+            last_plan=dict(state.get("last_plan", {}) or {}),
+            user_constraints=list(state.get("user_constraints", []) or []),
+            unresolved_questions=list(state.get("unresolved_questions", []) or []),
+            user_profile=state.get("user_profile"),
+            memory_context=state.get("memory_context", "") or "",
+            audit_summary=dict(state.get("audit_summary", {}) or {}),
+        )
 
     def _record_step(self, ctx: ContextPacket, step: str, start_time: float, **extra):
         usage = self._last_agent_usage_for_step(step)

@@ -77,6 +77,20 @@ class TaskStep:
             "requires_confirmation": self.requires_confirmation,
         }
 
+    @classmethod
+    def from_dict(cls, payload: Optional[dict[str, Any]]) -> "TaskStep":
+        if isinstance(payload, cls):
+            return payload
+        data = payload if isinstance(payload, dict) else {}
+        step_input = data.get("input") if isinstance(data.get("input"), dict) else {}
+        return cls(
+            tool=str(data.get("tool") or ""),
+            reason=str(data.get("reason") or ""),
+            input=dict(step_input),
+            risk_level=str(data.get("risk_level") or "low"),
+            requires_confirmation=bool(data.get("requires_confirmation", False)),
+        )
+
 
 @dataclass
 class TaskPlan:
@@ -96,6 +110,25 @@ class TaskPlan:
             "source": self.source,
             "route": self.route.to_dict() if self.route else {},
         }
+
+    @classmethod
+    def from_dict(cls, payload: Optional[dict[str, Any]]) -> "TaskPlan":
+        """Rebuild a plan after a JSON/checkpoint round trip."""
+        if isinstance(payload, cls):
+            return payload
+        data = payload if isinstance(payload, dict) else {}
+        raw_steps = data.get("steps") or []
+        steps = [TaskStep.from_dict(item) for item in raw_steps if isinstance(item, dict)]
+        route_payload = data.get("route")
+        route = RouteResult.from_dict(route_payload) if isinstance(route_payload, dict) and route_payload else None
+        return cls(
+            task_type=str(data.get("task_type") or ""),
+            steps=steps,
+            requires_confirmation=bool(data.get("requires_confirmation", False)),
+            final_response_mode=str(data.get("final_response_mode") or "tool_output"),
+            source=str(data.get("source") or "rules"),
+            route=route,
+        )
 
 
 class TaskPlanner:

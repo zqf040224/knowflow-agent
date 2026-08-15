@@ -22,8 +22,12 @@ class FakeMemory:
     def set_context(self, session_id, key, value):
         self.context[(session_id, key)] = value
 
-    def update_rolling_summary(self, session_id, message, response, plan, sources):
-        self.summaries.append((session_id, message, response, plan, sources))
+    def update_rolling_summary(
+        self, session_id, message, response, plan, sources, *, effect_key=None
+    ):
+        self.summaries.append(
+            (session_id, message, response, plan, sources, effect_key)
+        )
 
 
 def make_runtime(memory=None):
